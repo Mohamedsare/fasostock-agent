@@ -34,7 +34,7 @@ export default function LandingPage() {
             <ThemeToggle />
             <Button asChild>
               <Link href="/login">
-                Connexion admin <ArrowRight className="size-4" />
+                Connexion <ArrowRight className="size-4" />
               </Link>
             </Button>
           </div>
