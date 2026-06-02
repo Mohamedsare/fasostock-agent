@@ -25,6 +25,8 @@ export interface InboundResult {
   leadStatus?: LeadStatus;
   score?: number;
   reason?: string;
+  sent?: boolean;
+  sendError?: string;
 }
 
 /**
@@ -97,8 +99,12 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Inb
   await applyAgentResult(db, { conversation, contact, result, history });
 
   // Send the reply over WhatsApp (skip for spam / empty).
+  let sent: { ok: boolean; id?: string; error?: string } = { ok: false, error: "no_reply" };
   if (result.reply && result.status !== "spam") {
-    const sent = await sendWhatsAppText(contact.phone, result.reply);
+    sent = await sendWhatsAppText(contact.phone, result.reply);
+    if (!sent.ok) {
+      console.error(`[engine] WhatsApp send failed for ${contact.phone}: ${sent.error}`);
+    }
     await db.from("messages").insert({
       conversation_id: conversation.id,
       direction: "outbound",
@@ -115,6 +121,8 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Inb
     reply: result.reply,
     leadStatus: result.status,
     score: result.score,
+    sent: sent.ok,
+    sendError: sent.ok ? undefined : sent.error,
   };
 }
 

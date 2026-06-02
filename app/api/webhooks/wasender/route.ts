@@ -1,15 +1,29 @@
 import type { NextRequest } from "next/server";
 import { parseWasenderWebhook } from "@/lib/wasender";
 import { handleInboundMessage } from "@/lib/engine";
-import { serverEnv } from "@/lib/env";
+import { serverEnv, features, isSupabaseConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 // The handler waits on an LLM call + WhatsApp send; allow more than the 10s default.
 export const maxDuration = 30;
 
-/** Simple GET handshake so the endpoint is reachable/verifiable. */
+/**
+ * GET handshake + diagnostic. Reports which integrations are configured on the
+ * running server (booleans only — never secrets), so misconfigured deployments
+ * are easy to spot.
+ */
 export async function GET() {
-  return Response.json({ ok: true, service: "wasender-webhook" });
+  return Response.json({
+    ok: true,
+    service: "wasender-webhook",
+    configured: {
+      supabase: isSupabaseConfigured,
+      wasender: features.wasender,
+      openai: features.openai,
+      resend: features.resend,
+      webhookSecret: Boolean(serverEnv.wasenderWebhookSecret),
+    },
+  });
 }
 
 /**
