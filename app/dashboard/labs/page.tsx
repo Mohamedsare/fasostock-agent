@@ -1,20 +1,28 @@
+import { PageHeader } from "@/components/dashboard/page-header";
+import { Badge } from "@/components/ui/badge";
+import { LabsSimulator } from "@/components/labs/labs-simulator";
+import { getAgentSettings } from "@/lib/data";
+import { features } from "@/lib/env";
 import { FlaskConical } from "lucide-react";
-import { ModulePlaceholder } from "@/components/dashboard/module-placeholder";
 
 export const metadata = { title: "Labs IA" };
 
-export default function LabsPage() {
+export default async function LabsPage() {
+  const settings = await getAgentSettings();
+
   return (
-    <ModulePlaceholder
-      title="Labs IA"
-      description="Testez et améliorez votre agent en toute sécurité."
-      icon={FlaskConical}
-      points={[
-        "Simuler une conversation WhatsApp",
-        "Tester un prompt, un ton, une objection",
-        "Voir le score, le statut prédit et l'email généré",
-        "Comparer plusieurs réponses, sauvegarder un prompt performant",
-      ]}
-    />
+    <div className="space-y-6">
+      <PageHeader
+        title="Labs IA"
+        description="Simulez une conversation et observez en direct la réponse, le score et le statut de l'agent."
+      >
+        <Badge tone={features.openai ? "success" : "warning"} className="gap-1.5">
+          <FlaskConical className="size-3.5" />
+          {features.openai ? "LLM connecté" : "Mode local (sans clé LLM)"}
+        </Badge>
+      </PageHeader>
+
+      <LabsSimulator defaultTone={settings.tone} defaultPrompt={settings.system_prompt} />
+    </div>
   );
 }
