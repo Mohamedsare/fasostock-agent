@@ -20,7 +20,8 @@ for (const line of file.split("\n")) {
 
 const TEST_PHONE = "22600000000"; // numéro fictif de test
 const SECRET = process.env.WASENDER_WEBHOOK_SECRET ?? "";
-const URL = `http://localhost:3000/api/webhooks/wasender${SECRET ? `?secret=${SECRET}` : ""}`;
+const BASE = (process.env.WEBHOOK_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+const URL = `${BASE}/api/webhooks/wasender${SECRET ? `?secret=${SECRET}` : ""}`;
 
 const payload = {
   event: "messages.upsert",

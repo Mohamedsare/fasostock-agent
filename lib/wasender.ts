@@ -50,6 +50,12 @@ export async function sendWhatsAppText(to: string, text: string): Promise<SendRe
 
       if (res.ok) {
         const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        // Wasender returns HTTP 200 even on logical failures (e.g. disconnected
+        // session) with `{ success: false, message }`. Treat that as a failure.
+        if (data && data.success === false) {
+          lastError = `Wasender: ${(data.message as string) ?? "échec d'envoi"}`;
+          break;
+        }
         const id =
           (data?.data as { msgId?: string; id?: string })?.msgId ??
           (data?.data as { id?: string })?.id ??
