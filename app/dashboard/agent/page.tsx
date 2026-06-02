@@ -1,20 +1,19 @@
-import { Bot } from "lucide-react";
-import { ModulePlaceholder } from "@/components/dashboard/module-placeholder";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { AgentForm } from "@/components/agent/agent-form";
+import { getAgentSettings } from "@/lib/data";
 
 export const metadata = { title: "Agent IA" };
 
-export default function AgentPage() {
+export default async function AgentPage() {
+  const settings = await getAgentSettings();
+
   return (
-    <ModulePlaceholder
-      title="Agent IA"
-      description="Configurez le comportement de votre assistant WhatsApp."
-      icon={Bot}
-      points={[
-        "Nom, ton, langue, message d'accueil",
-        "Prompt système et règles de qualification",
-        "Règles de transfert humain, seuils",
-        "Activation IA, mode support / prospection / hybride",
-      ]}
-    />
+    <div className="space-y-6">
+      <PageHeader
+        title="Agent IA"
+        description="Configurez le comportement, le ton et les règles de votre assistant WhatsApp."
+      />
+      <AgentForm settings={settings} />
+    </div>
   );
 }

@@ -1,20 +1,36 @@
-import { Send } from "lucide-react";
-import { ModulePlaceholder } from "@/components/dashboard/module-placeholder";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { FollowUpsView, type EnrichedFollowUp } from "@/components/follow-ups/follow-ups-view";
+import { getConversations, getFollowUps } from "@/lib/data";
+import { contactLabel } from "@/lib/utils";
 
 export const metadata = { title: "Relances" };
 
-export default function FollowUpsPage() {
+export default async function FollowUpsPage() {
+  const [followUps, conversations] = await Promise.all([getFollowUps(), getConversations()]);
+
+  const nameByContact = new Map(
+    conversations.map((c) => [c.contact.id, contactLabel(c.contact.name, c.contact.phone)]),
+  );
+
+  const enriched: EnrichedFollowUp[] = followUps.map((f) => ({
+    id: f.id,
+    conversation_id: f.conversation_id,
+    step: f.step,
+    scheduled_at: f.scheduled_at,
+    status: f.status,
+    message: f.message,
+    contactName: nameByContact.get(f.contact_id) ?? "Contact",
+  }));
+
+  const active = enriched.filter((f) => f.status === "scheduled").length;
+
   return (
-    <ModulePlaceholder
-      title="Relances automatiques"
-      description="Planifiez et suivez les relances des prospects sans réponse."
-      icon={Send}
-      points={[
-        "Relance 1 (24h), 2 (3j), 3 (7j)",
-        "Maximum 3 relances par prospect",
-        "Arrêt si réponse, refus ou conversion",
-        "Suivi du statut de chaque relance",
-      ]}
-    />
+    <div className="space-y-6">
+      <PageHeader
+        title="Relances automatiques"
+        description={`${active} relance(s) planifiée(s) · règle 24h / 3j / 7j, max 3.`}
+      />
+      <FollowUpsView followUps={enriched} />
+    </div>
   );
 }

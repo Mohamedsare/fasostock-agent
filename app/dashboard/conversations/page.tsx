@@ -1,22 +1,19 @@
-import { MessagesSquare } from "lucide-react";
-import { ModulePlaceholder } from "@/components/dashboard/module-placeholder";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { ConversationList } from "@/components/conversations/conversation-list";
+import { getConversations } from "@/lib/data";
 
 export const metadata = { title: "Conversations" };
 
-export default function ConversationsPage() {
+export default async function ConversationsPage() {
+  const conversations = await getConversations();
+
   return (
-    <ModulePlaceholder
-      title="Conversations WhatsApp"
-      description="Toutes vos conversations, filtrables par statut et recherchables."
-      icon={MessagesSquare}
-      points={[
-        "Liste des conversations avec statut, score et dernier message",
-        "Recherche par nom ou numéro, filtres par statut",
-        "Vue détail avec historique complet des messages",
-        "Reprise manuelle / réactivation de l'IA",
-        "Envoi de message manuel à un contact",
-        "Marquer comme qualifié ou converti",
-      ]}
-    />
+    <div className="space-y-6">
+      <PageHeader
+        title="Conversations"
+        description={`${conversations.length} conversation${conversations.length > 1 ? "s" : ""} WhatsApp.`}
+      />
+      <ConversationList conversations={conversations} />
+    </div>
   );
 }

@@ -1,20 +1,19 @@
-import { BookOpen } from "lucide-react";
-import { ModulePlaceholder } from "@/components/dashboard/module-placeholder";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { KnowledgeManager } from "@/components/knowledge/knowledge-manager";
+import { getKnowledge } from "@/lib/data";
 
 export const metadata = { title: "Base de connaissance" };
 
-export default function KnowledgeBasePage() {
+export default async function KnowledgeBasePage() {
+  const entries = await getKnowledge();
+
   return (
-    <ModulePlaceholder
-      title="Base de connaissance"
-      description="Les informations que l'IA utilise pour répondre."
-      icon={BookOpen}
-      points={[
-        "Ajouter, modifier, supprimer une information",
-        "Activer / désactiver une entrée",
-        "Classement par catégorie",
-        "Utilisée par l'agent avant chaque réponse",
-      ]}
-    />
+    <div className="space-y-6">
+      <PageHeader
+        title="Base de connaissance"
+        description="Les informations que l'agent IA utilise pour répondre avec précision."
+      />
+      <KnowledgeManager entries={entries} />
+    </div>
   );
 }

@@ -1,20 +1,28 @@
-import { Settings } from "lucide-react";
-import { ModulePlaceholder } from "@/components/dashboard/module-placeholder";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { SettingsView } from "@/components/settings/settings-view";
+import { getSessionUser } from "@/lib/auth";
+import { features, isSupabaseConfigured, publicEnv } from "@/lib/env";
 
 export const metadata = { title: "Paramètres" };
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const user = await getSessionUser();
+  const appUrl = publicEnv.appUrl.replace(/\/$/, "");
+
   return (
-    <ModulePlaceholder
-      title="Paramètres"
-      description="Configuration générale de l'application et des intégrations."
-      icon={Settings}
-      points={[
-        "Profil admin et préférences",
-        "Connexion WhatsApp (Wasender)",
-        "Email (Resend) et destinataire des alertes",
-        "Fournisseur LLM et clés d'API",
-      ]}
-    />
+    <div className="space-y-6">
+      <PageHeader title="Paramètres" description="Profil, intégrations et configuration des connexions." />
+      <SettingsView
+        user={{ name: user.name, email: user.email }}
+        integrations={{
+          supabase: isSupabaseConfigured,
+          wasender: features.wasender,
+          openai: features.openai,
+          resend: features.resend,
+        }}
+        webhookUrl={`${appUrl}/api/webhooks/wasender`}
+        appUrl={appUrl}
+      />
+    </div>
   );
 }
