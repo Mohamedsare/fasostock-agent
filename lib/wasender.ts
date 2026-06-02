@@ -33,7 +33,8 @@ export async function sendWhatsAppText(to: string, text: string): Promise<SendRe
   }
 
   const url = `${serverEnv.wasenderBaseUrl.replace(/\/$/, "")}/send-message`;
-  const body = JSON.stringify({ to: normalizePhone(to), text });
+  // Wasender requires E.164 (with leading "+"). normalizePhone yields digits.
+  const body = JSON.stringify({ to: toE164(to), text });
 
   let lastError = "";
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -57,8 +58,9 @@ export async function sendWhatsAppText(to: string, text: string): Promise<SendRe
       }
 
       lastError = `HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`;
-      // Retry only on 429 / 5xx.
-      if (res.status !== 429 && res.status < 500) break;
+      // Don't retry on 4xx (incl. 429 rate-limit, where retry_after is ~minutes);
+      // only transient 5xx / network errors are worth retrying.
+      if (res.status < 500) break;
     } catch (err) {
       lastError = err instanceof Error ? err.message : "network error";
     }
@@ -67,6 +69,12 @@ export async function sendWhatsAppText(to: string, text: string): Promise<SendRe
 
   console.error("[wasender] send failed:", lastError);
   return { ok: false, error: lastError };
+}
+
+/** Format a phone/JID as E.164 (digits with a leading "+"), as Wasender expects. */
+export function toE164(value: string): string {
+  const digits = normalizePhone(value);
+  return digits ? `+${digits}` : "";
 }
 
 /**
