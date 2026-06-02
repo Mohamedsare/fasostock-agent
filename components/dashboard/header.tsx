@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Search } from "lucide-react";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { UserMenu } from "@/components/dashboard/user-menu";
@@ -18,10 +19,13 @@ export function Header({
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md lg:px-6">
       <MobileNav />
 
-      <div className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground sm:flex sm:w-72">
+      <Link
+        href="/dashboard/conversations"
+        className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex sm:w-72"
+      >
         <Search className="size-4" />
-        <span className="text-muted-foreground/70">Rechercher un prospect, un numéro…</span>
-      </div>
+        <span>Rechercher un prospect, un numéro…</span>
+      </Link>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <Badge tone={aiEnabled ? "success" : "neutral"} className="gap-1.5">

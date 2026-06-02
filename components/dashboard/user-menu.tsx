@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut, User as UserIcon } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Settings as SettingsIcon } from "lucide-react";
 import { signOut } from "@/lib/actions/auth";
 import {
   DropdownMenu,
@@ -29,9 +30,11 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
-          <UserIcon />
-          Mon profil
+        <DropdownMenuItem asChild>
+          <Link href="/dashboard/settings">
+            <SettingsIcon />
+            Paramètres
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <form action={signOut}>
