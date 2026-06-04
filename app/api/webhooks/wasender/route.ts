@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { parseWasenderWebhook } from "@/lib/wasender";
 import { handleInboundMessage } from "@/lib/engine";
+import { resolveAgentBySession } from "@/lib/agents";
 import { serverEnv, features, isSupabaseConfigured } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -82,8 +83,17 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: true, ignored: true });
   }
 
+  // Route the message to the agent that owns this Wasender session (tenant).
+  if (!inbound.sessionId) {
+    return Response.json({ ok: true, ignored: true, reason: "no_session" });
+  }
+  const agentCtx = await resolveAgentBySession(inbound.sessionId);
+  if (!agentCtx) {
+    return Response.json({ ok: true, ignored: true, reason: "unknown_session" });
+  }
+
   try {
-    const result = await handleInboundMessage(inbound);
+    const result = await handleInboundMessage(inbound, agentCtx);
     return Response.json({ ok: true, ...result });
   } catch (error) {
     console.error("[webhooks/wasender] processing failed:", error);

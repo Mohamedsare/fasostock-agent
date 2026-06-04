@@ -9,13 +9,13 @@ import {
   decryptMediaFile,
   type InboundMessage,
   type SendResult,
+  type WasenderCreds,
 } from "@/lib/wasender";
 import { transcribeAudio, describeImage, synthesizeSpeech } from "@/lib/media";
 import { scoreConversation, shouldNotifyAdmin } from "@/lib/scoring";
-import { DEFAULT_AGENT_SETTINGS } from "@/lib/constants";
 import type {
+  AgentContext,
   AgentResult,
-  AgentSettings,
   Contact,
   Conversation,
   EmailTrigger,
@@ -23,6 +23,12 @@ import type {
   LeadStatus,
   Message,
 } from "@/lib/types";
+
+type Ctx = AgentContext;
+const credsOf = (ctx: Ctx): WasenderCreds => ({
+  apiKey: ctx.wasenderKey,
+  baseUrl: ctx.wasenderBaseUrl,
+});
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -42,16 +48,21 @@ export interface InboundResult {
  * so it works from webhooks without a user session. Idempotent on the inbound
  * Wasender message id.
  */
-export async function handleInboundMessage(inbound: InboundMessage): Promise<InboundResult> {
+export async function handleInboundMessage(
+  inbound: InboundMessage,
+  ctx: Ctx,
+): Promise<InboundResult> {
   if (inbound.fromMe) return { status: "ignored", reason: "outgoing_echo" };
 
   const db = createAdminClient();
+  const agentId = ctx.agent.id;
 
-  // Dedupe on the provider message id (before any costly media processing).
+  // Dedupe on the provider message id (scoped to this agent).
   if (inbound.messageId) {
     const { data: existing } = await db
       .from("messages")
       .select("id")
+      .eq("agent_id", agentId)
       .eq("wasender_id", inbound.messageId)
       .maybeSingle();
     if (existing) return { status: "duplicate" };
@@ -59,14 +70,15 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Inb
 
   // Turn whatever the client sent (text, voice, image, document…) into text the
   // agent can reason about, and decide whether to answer with a voice note.
-  const resolved = await resolveInboundContent(inbound);
+  const resolved = await resolveInboundContent(inbound, ctx);
   if (!resolved.text) return { status: "ignored", reason: "unsupported_or_empty" };
 
-  const contact = await upsertContact(db, inbound);
-  const conversation = await getOrCreateConversation(db, contact.id);
+  const contact = await upsertContact(db, inbound, agentId);
+  const conversation = await getOrCreateConversation(db, contact.id, agentId);
 
   // Save the inbound message + bump conversation metadata.
   await db.from("messages").insert({
+    agent_id: agentId,
     conversation_id: conversation.id,
     direction: "inbound",
     sender: "contact",
@@ -82,12 +94,13 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Inb
     })
     .eq("id", conversation.id);
 
-  await logAudit(db, "contact", "inbound_message", conversation.id, { phone: contact.phone });
+  await logAudit(db, agentId, "contact", "inbound_message", conversation.id, {
+    phone: contact.phone,
+  });
 
-  // Decide whether the AI should reply.
-  const settings = await getAgentSettings(db);
+  // Decide whether the AI should reply (this agent's own config).
   const aiShouldReply =
-    settings.ai_enabled && conversation.ai_enabled && conversation.mode === "ai";
+    ctx.agent.ai_enabled && conversation.ai_enabled && conversation.mode === "ai";
 
   if (!aiShouldReply) {
     return {
@@ -99,16 +112,17 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Inb
 
   // Build context from recent history (oldest → newest).
   const history = await getRecentHistory(db, conversation.id);
-  const knowledge = await getActiveKnowledge(db);
+  const knowledge = await getActiveKnowledge(db, agentId);
 
   const result = await generateAgentResult({
     messages: history,
-    settings,
+    settings: ctx.agent,
     knowledge,
     previousScore: conversation.score,
+    openaiKey: ctx.openaiKey,
   });
 
-  await applyAgentResult(db, { conversation, contact, result, history });
+  await applyAgentResult(db, { conversation, contact, result, history, ctx });
 
   // On a silent handoff (qualified/hot lead, or explicit human request) we
   // deliberately stay silent with the prospect: never tell them we're passing
@@ -122,13 +136,14 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Inb
   let sent: SendResult = { ok: false, error: "no_reply" };
   let repliedByVoice = false;
   if (result.reply && result.status !== "spam" && !isHandoff) {
-    const delivery = await deliverReply(contact.phone, result.reply, resolved.replyAsVoice);
+    const delivery = await deliverReply(ctx, contact.phone, result.reply, resolved.replyAsVoice);
     sent = delivery.sent;
     repliedByVoice = delivery.byVoice;
     if (!sent.ok) {
       console.error(`[engine] WhatsApp send failed for ${contact.phone}: ${sent.error}`);
     }
     await db.from("messages").insert({
+      agent_id: agentId,
       conversation_id: conversation.id,
       direction: "outbound",
       sender: "ai",
@@ -157,9 +172,10 @@ async function applyAgentResult(
     contact: Contact;
     result: AgentResult;
     history: { role: "user" | "assistant"; content: string }[];
+    ctx: Ctx;
   },
 ) {
-  const { conversation, contact, result } = args;
+  const { conversation, contact, result, ctx } = args;
   // Qualified/hot leads (and explicit human requests) are handed to Mohamed
   // silently: the AI stops answering and he takes over in person.
   const isHandoff = isSilentHandoff(result.status);
@@ -184,6 +200,7 @@ async function applyAgentResult(
   const contactText = args.history.filter((m) => m.role === "user").map((m) => m.content).join("\n");
   const { criteria } = scoreConversation(contactText, conversation.score);
   await db.from("lead_qualifications").insert({
+    agent_id: ctx.agent.id,
     conversation_id: conversation.id,
     contact_id: contact.id,
     score: result.score,
@@ -201,16 +218,16 @@ async function applyAgentResult(
   const trigger = emailTriggerFor(result.status);
   const becameNotable = result.status !== conversation.status && shouldNotifyAdmin(result.status);
   if (trigger && (result.status === "humain_requis" || becameNotable)) {
-    await notifyAdmin(db, { trigger, contact, conversation: { ...conversation, ...result } });
+    await notifyAdmin(db, { trigger, contact, conversation: { ...conversation, ...result }, ctx });
   }
 }
 
 async function notifyAdmin(
   db: Db,
-  args: { trigger: EmailTrigger; contact: Contact; conversation: Conversation & AgentResult },
+  args: { trigger: EmailTrigger; contact: Contact; conversation: Conversation & AgentResult; ctx: Ctx },
 ) {
-  const { trigger, contact, conversation } = args;
-  // Mohamed is alerted over WhatsApp (not email) when a lead becomes notable.
+  const { trigger, contact, conversation, ctx } = args;
+  // The agent's owner is alerted over WhatsApp when a lead becomes notable.
   const sent = await sendLeadWhatsApp({
     trigger,
     contact,
@@ -221,6 +238,8 @@ async function notifyAdmin(
       summary: conversation.summary,
       next_action: conversation.next_action,
     } as Conversation,
+    creds: credsOf(ctx),
+    adminWhatsapp: ctx.adminWhatsapp,
   });
 
   if (!sent.ok) {
@@ -229,8 +248,9 @@ async function notifyAdmin(
 
   // Keep a notification trail even though the channel is now WhatsApp.
   await db.from("email_notifications").insert({
+    agent_id: ctx.agent.id,
     trigger,
-    to_email: process.env.ADMIN_WHATSAPP ?? "+212771668079",
+    to_email: ctx.adminWhatsapp,
     subject: `WhatsApp · ${trigger}`,
     conversation_id: conversation.id,
     contact_id: contact.id,
@@ -254,7 +274,7 @@ interface ResolvedInbound {
  * transcribed, images are described; other media are acknowledged with a clear
  * marker so the agent and Mohamed both know what the client sent.
  */
-async function resolveInboundContent(inbound: InboundMessage): Promise<ResolvedInbound> {
+async function resolveInboundContent(inbound: InboundMessage, ctx: Ctx): Promise<ResolvedInbound> {
   const caption = inbound.media?.caption?.trim() || inbound.text.trim();
 
   switch (inbound.kind) {
@@ -262,8 +282,10 @@ async function resolveInboundContent(inbound: InboundMessage): Promise<ResolvedI
       return { text: inbound.text.trim(), replyAsVoice: false };
 
     case "audio": {
-      const url = await getDecryptedMediaUrl(inbound);
-      const transcript = url ? await transcribeAudio(url, inbound.media?.mimetype) : null;
+      const url = await getDecryptedMediaUrl(inbound, ctx);
+      const transcript = url
+        ? await transcribeAudio(url, ctx.openaiKey, inbound.media?.mimetype)
+        : null;
       if (transcript) return { text: `🎤 ${transcript}`, replyAsVoice: true };
       // Couldn't understand the voice note — answer in text and ask to repeat.
       return {
@@ -273,8 +295,8 @@ async function resolveInboundContent(inbound: InboundMessage): Promise<ResolvedI
     }
 
     case "image": {
-      const url = await getDecryptedMediaUrl(inbound);
-      const description = url ? await describeImage(url, caption) : null;
+      const url = await getDecryptedMediaUrl(inbound, ctx);
+      const description = url ? await describeImage(url, ctx.openaiKey, caption) : null;
       const parts = ["🖼️ Image reçue."];
       if (caption) parts.push(`Légende : ${caption}.`);
       if (description) parts.push(`Contenu : ${description}`);
@@ -310,9 +332,9 @@ async function resolveInboundContent(inbound: InboundMessage): Promise<ResolvedI
 }
 
 /** Decrypt an inbound media message to a temporary public URL (or null). */
-async function getDecryptedMediaUrl(inbound: InboundMessage): Promise<string | null> {
+async function getDecryptedMediaUrl(inbound: InboundMessage, ctx: Ctx): Promise<string | null> {
   if (!inbound.media?.url || !inbound.rawMessage) return null;
-  const res = await decryptMediaFile(inbound.rawMessage);
+  const res = await decryptMediaFile(inbound.rawMessage, credsOf(ctx));
   if (!res.ok || !res.url) {
     console.error(`[engine] media decrypt failed: ${res.error}`);
     return null;
@@ -326,16 +348,18 @@ async function getDecryptedMediaUrl(inbound: InboundMessage): Promise<string | n
  * so the prospect always gets an answer.
  */
 async function deliverReply(
+  ctx: Ctx,
   phone: string,
   reply: string,
   asVoice: boolean,
 ): Promise<{ sent: SendResult; byVoice: boolean }> {
+  const creds = credsOf(ctx);
   if (asVoice) {
-    const speech = await synthesizeSpeech(reply);
+    const speech = await synthesizeSpeech(reply, ctx.openaiKey);
     if (speech) {
-      const uploaded = await uploadMediaToWasender(speech.bytes, speech.mimetype);
+      const uploaded = await uploadMediaToWasender(speech.bytes, speech.mimetype, creds);
       if (uploaded.ok && uploaded.url) {
-        const sent = await sendWhatsAppAudio(phone, uploaded.url);
+        const sent = await sendWhatsAppAudio(phone, uploaded.url, creds);
         if (sent.ok) return { sent, byVoice: true };
         console.error(`[engine] voice send failed, falling back to text: ${sent.error}`);
       } else {
@@ -343,23 +367,33 @@ async function deliverReply(
       }
     }
   }
-  return { sent: await sendWhatsAppText(phone, reply), byVoice: false };
+  return { sent: await sendWhatsAppText(phone, reply, creds), byVoice: false };
 }
 
 // ─────────────────────────── helpers ───────────────────────────
 
-async function upsertContact(db: Db, inbound: InboundMessage): Promise<Contact> {
+async function upsertContact(db: Db, inbound: InboundMessage, agentId: string): Promise<Contact> {
   // Match by phone first; fall back to the WhatsApp "@lid" id so the same person
   // resolves to a single contact even when a webhook omits the phone (which
   // otherwise spawns a duplicate contact and "loses" the conversation history).
-  // All lid handling degrades gracefully if migration 0002 hasn't run yet.
+  // Scoped per agent: the same phone can be a prospect of different agents.
   let existing: Contact | null = null;
   {
-    const byPhone = await db.from("contacts").select("*").eq("phone", inbound.from).maybeSingle();
+    const byPhone = await db
+      .from("contacts")
+      .select("*")
+      .eq("agent_id", agentId)
+      .eq("phone", inbound.from)
+      .maybeSingle();
     existing = (byPhone.data as Contact) ?? null;
   }
   if (!existing && inbound.lid) {
-    const byLid = await db.from("contacts").select("*").eq("lid", inbound.lid).maybeSingle();
+    const byLid = await db
+      .from("contacts")
+      .select("*")
+      .eq("agent_id", agentId)
+      .eq("lid", inbound.lid)
+      .maybeSingle();
     if (!byLid.error) existing = (byLid.data as Contact) ?? null;
   }
 
@@ -389,7 +423,12 @@ async function upsertContact(db: Db, inbound: InboundMessage): Promise<Contact> 
     return existing;
   }
 
-  const base = { phone: inbound.from, name: inbound.name, source: "whatsapp" as const };
+  const base = {
+    agent_id: agentId,
+    phone: inbound.from,
+    name: inbound.name,
+    source: "whatsapp" as const,
+  };
   let { data: created, error } = await db
     .from("contacts")
     .insert({ ...base, lid: inbound.lid })
@@ -413,7 +452,11 @@ function isMissingLidColumn(error: { message?: string; code?: string }): boolean
   return m.includes("lid") && (m.includes("column") || m.includes("schema cache"));
 }
 
-async function getOrCreateConversation(db: Db, contactId: string): Promise<Conversation> {
+async function getOrCreateConversation(
+  db: Db,
+  contactId: string,
+  agentId: string,
+): Promise<Conversation> {
   const { data: existing } = await db
     .from("conversations")
     .select("*")
@@ -425,7 +468,7 @@ async function getOrCreateConversation(db: Db, contactId: string): Promise<Conve
 
   const { data: created, error } = await db
     .from("conversations")
-    .insert({ contact_id: contactId, status: "nouveau", mode: "ai", ai_enabled: true })
+    .insert({ agent_id: agentId, contact_id: contactId, status: "nouveau", mode: "ai", ai_enabled: true })
     .select("*")
     .single();
   if (error || !created) throw new Error(`conversation create failed: ${error?.message}`);
@@ -452,28 +495,12 @@ async function getRecentHistory(
     }));
 }
 
-async function getAgentSettings(db: Db): Promise<AgentSettings> {
-  const { data } = await db.from("agent_settings").select("*").limit(1).maybeSingle();
-  if (data) return data as AgentSettings;
-  return {
-    id: "default",
-    agent_name: DEFAULT_AGENT_SETTINGS.agent_name,
-    tone: DEFAULT_AGENT_SETTINGS.tone,
-    language: DEFAULT_AGENT_SETTINGS.language,
-    welcome_message: DEFAULT_AGENT_SETTINGS.welcome_message,
-    system_prompt: "",
-    qualification_rules: "",
-    human_handoff_rules: "",
-    qualified_threshold: DEFAULT_AGENT_SETTINGS.qualified_threshold,
-    hot_threshold: DEFAULT_AGENT_SETTINGS.hot_threshold,
-    ai_enabled: true,
-    operating_mode: DEFAULT_AGENT_SETTINGS.operating_mode,
-    updated_at: new Date().toISOString(),
-  };
-}
-
-async function getActiveKnowledge(db: Db): Promise<KnowledgeBaseEntry[]> {
-  const { data } = await db.from("knowledge_base").select("*").eq("is_active", true);
+async function getActiveKnowledge(db: Db, agentId: string): Promise<KnowledgeBaseEntry[]> {
+  const { data } = await db
+    .from("knowledge_base")
+    .select("*")
+    .eq("agent_id", agentId)
+    .eq("is_active", true);
   return (data as KnowledgeBaseEntry[]) ?? [];
 }
 
@@ -509,13 +536,16 @@ function emailTriggerFor(status: LeadStatus): EmailTrigger | null {
 
 async function logAudit(
   db: Db,
+  agentId: string,
   actor: string,
   action: string,
   entityId: string,
   metadata: Record<string, unknown>,
 ) {
   try {
-    await db.from("audit_logs").insert({ actor, action, entity: "conversation", entity_id: entityId, metadata });
+    await db
+      .from("audit_logs")
+      .insert({ agent_id: agentId, actor, action, entity: "conversation", entity_id: entityId, metadata });
   } catch {
     // auditing is best-effort
   }

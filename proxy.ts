@@ -39,20 +39,37 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isDashboard = pathname.startsWith("/dashboard");
-  const isLogin = pathname === "/login";
+  const isOnboarding = pathname === "/onboarding";
+  const isAuthPage = pathname === "/login" || pathname === "/signup";
 
-  if (!user && isDashboard) {
+  const redirectTo = (path: string) => {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("redirect", pathname);
+    url.pathname = path;
+    url.search = "";
     return NextResponse.redirect(url);
+  };
+
+  // Unauthenticated: protect the dashboard + onboarding.
+  if (!user) {
+    if (isDashboard || isOnboarding) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(url);
+    }
+    return response;
   }
 
-  if (user && isLogin) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
+  // Authenticated: ensure the user has an organization (onboarding gate).
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("org_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  const hasOrg = Boolean((profile as { org_id?: string } | null)?.org_id);
+
+  if (!hasOrg && (isDashboard || isAuthPage)) return redirectTo("/onboarding");
+  if (hasOrg && (isAuthPage || isOnboarding)) return redirectTo("/dashboard");
 
   return response;
 }

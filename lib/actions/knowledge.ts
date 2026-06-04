@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveAgentId } from "@/lib/agents";
 import { isSupabaseConfigured } from "@/lib/env";
 import { knowledgeEntrySchema } from "@/lib/validations";
 import type { ActionResult } from "@/lib/actions/conversations";
@@ -15,8 +16,13 @@ export async function createKnowledge(input: unknown): Promise<ActionResult> {
   const parsed = knowledgeEntrySchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Champs invalides." };
 
+  const agentId = await getActiveAgentId();
+  if (!agentId) return { ok: false, error: "Aucun agent actif." };
+
   const supabase = await createClient();
-  const { error } = await supabase.from("knowledge_base").insert(parsed.data);
+  const { error } = await supabase
+    .from("knowledge_base")
+    .insert({ ...parsed.data, agent_id: agentId });
   if (error) return { ok: false, error: error.message };
   revalidate();
   return { ok: true };

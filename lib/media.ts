@@ -1,20 +1,20 @@
 import "server-only";
 import OpenAI, { toFile } from "openai";
-import { serverEnv, features } from "@/lib/env";
+import { serverEnv } from "@/lib/env";
 
 /**
  * Multi-modal media layer: turns inbound WhatsApp media into text the agent can
  * reason about (speech-to-text, image understanding) and turns the agent's text
  * reply back into a voice note (text-to-speech). All functions degrade
  * gracefully — they return null on failure so the engine can fall back to text.
+ *
+ * Each function takes the tenant's OpenAI key (falls back to the platform key).
  */
 
-let client: OpenAI | null = null;
-function getClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI({ apiKey: serverEnv.openaiApiKey, baseURL: serverEnv.openaiBaseUrl });
-  }
-  return client;
+function getClient(openaiKey?: string): OpenAI | null {
+  const apiKey = openaiKey || serverEnv.platformOpenaiApiKey;
+  if (!apiKey) return null;
+  return new OpenAI({ apiKey, baseURL: serverEnv.openaiBaseUrl });
 }
 
 /** Download a (decrypted) media URL into memory. Returns null on failure. */
@@ -35,8 +35,13 @@ async function download(url: string): Promise<{ bytes: Buffer; mimetype: string 
 }
 
 /** Transcribe a voice note / audio file to text (speech-to-text). */
-export async function transcribeAudio(url: string, mimetype?: string): Promise<string | null> {
-  if (!features.openai) return null;
+export async function transcribeAudio(
+  url: string,
+  openaiKey?: string,
+  mimetype?: string,
+): Promise<string | null> {
+  const client = getClient(openaiKey);
+  if (!client) return null;
   const dl = await download(url);
   if (!dl) return null;
 
@@ -44,7 +49,7 @@ export async function transcribeAudio(url: string, mimetype?: string): Promise<s
     const ext = extensionFor(mimetype ?? dl.mimetype);
     const file = await toFile(dl.bytes, `audio.${ext}`, { type: mimetype ?? dl.mimetype });
     const language = serverEnv.openaiTranscribeLanguage;
-    const result = await getClient().audio.transcriptions.create({
+    const result = await client.audio.transcriptions.create({
       file,
       model: serverEnv.openaiTranscribeModel,
       // Pin the language so French/Mooré voice notes aren't mis-detected.
@@ -59,10 +64,15 @@ export async function transcribeAudio(url: string, mimetype?: string): Promise<s
 }
 
 /** Describe an image (in French) so the agent understands what the client sent. */
-export async function describeImage(url: string, caption?: string): Promise<string | null> {
-  if (!features.openai) return null;
+export async function describeImage(
+  url: string,
+  openaiKey?: string,
+  caption?: string,
+): Promise<string | null> {
+  const client = getClient(openaiKey);
+  if (!client) return null;
   try {
-    const completion = await getClient().chat.completions.create({
+    const completion = await client.chat.completions.create({
       model: serverEnv.openaiModel,
       temperature: 0.2,
       messages: [
@@ -98,10 +108,12 @@ export async function describeImage(url: string, caption?: string): Promise<stri
  */
 export async function synthesizeSpeech(
   text: string,
+  openaiKey?: string,
 ): Promise<{ bytes: Uint8Array; mimetype: string } | null> {
-  if (!features.openai || !text.trim()) return null;
+  const client = getClient(openaiKey);
+  if (!client || !text.trim()) return null;
   try {
-    const res = await getClient().audio.speech.create({
+    const res = await client.audio.speech.create({
       model: serverEnv.openaiTtsModel,
       voice: serverEnv.openaiTtsVoice,
       input: text,

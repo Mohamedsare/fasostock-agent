@@ -60,12 +60,12 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg">
-              <Link href="/login">
-                Accéder au dashboard <ArrowRight className="size-4" />
+              <Link href="/signup">
+                Créer mon agent <ArrowRight className="size-4" />
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="#features">Découvrir les fonctionnalités</Link>
+              <Link href="/login">Accéder au dashboard</Link>
             </Button>
           </div>
         </div>

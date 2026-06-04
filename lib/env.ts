@@ -46,8 +46,30 @@ export const serverEnv = {
   get wasenderWebhookSecret() {
     return process.env.WASENDER_WEBHOOK_SECRET ?? "";
   },
+  /**
+   * Account-level Wasender Personal Access Token — manages WhatsApp sessions
+   * (create / QR / connect / status) for every tenant under the platform's
+   * single Wasender account. Distinct from a per-session key (used to send).
+   */
+  get wasenderAccountToken() {
+    return required(
+      "WASENDER_ACCOUNT_TOKEN",
+      process.env.WASENDER_ACCOUNT_TOKEN || process.env.WASENDER_API_KEY,
+    );
+  },
+  /** Passphrase used to encrypt tenant secrets at rest (see lib/crypto.ts). */
+  get appEncryptionKey() {
+    return required(
+      "APP_ENCRYPTION_KEY",
+      process.env.APP_ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY,
+    );
+  },
   get openaiApiKey() {
     return required("OPENAI_API_KEY", process.env.OPENAI_API_KEY);
+  },
+  /** Platform OpenAI key used as a fallback when a tenant hasn't set their own. */
+  get platformOpenaiApiKey() {
+    return process.env.OPENAI_API_KEY ?? "";
   },
   get openaiModel() {
     return process.env.OPENAI_MODEL || "gpt-4o-mini";

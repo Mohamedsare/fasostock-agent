@@ -1,9 +1,10 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { sendWhatsAppText } from "@/lib/wasender";
+import { resolveAgentContextForConversation, wasenderCredsOf } from "@/lib/agents";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseConfigured, serverEnv } from "@/lib/env";
 
 const bodySchema = z.object({
   to: z.string().min(6, "Numéro invalide"),
@@ -32,11 +33,16 @@ export async function POST(req: NextRequest) {
   }
 
   const { to, text, conversationId } = parsed.data;
-  const sent = await sendWhatsAppText(to, text);
+  const ctx = conversationId ? await resolveAgentContextForConversation(conversationId) : null;
+  const creds = ctx
+    ? wasenderCredsOf(ctx)
+    : { apiKey: null, baseUrl: serverEnv.wasenderBaseUrl };
+  const sent = await sendWhatsAppText(to, text, creds);
 
   if (conversationId && isSupabaseConfigured) {
     const db = createAdminClient();
     await db.from("messages").insert({
+      agent_id: ctx?.agent.id ?? null,
       conversation_id: conversationId,
       direction: "outbound",
       sender: "admin",

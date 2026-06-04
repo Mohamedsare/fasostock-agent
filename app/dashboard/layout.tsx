@@ -1,8 +1,8 @@
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Header } from "@/components/dashboard/header";
 import { getSessionUser } from "@/lib/auth";
-import { getAgentSettings } from "@/lib/data";
-import { usingMockData } from "@/lib/data";
+import { getAgentSettings, usingMockData } from "@/lib/data";
+import { getOrgAgents, getActiveAgentId } from "@/lib/agents";
 import { Database } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -10,13 +10,24 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [user, settings] = await Promise.all([getSessionUser(), getAgentSettings()]);
+  const [user, settings, agents, activeAgentId] = await Promise.all([
+    getSessionUser(),
+    getAgentSettings(),
+    usingMockData ? Promise.resolve([]) : getOrgAgents(),
+    usingMockData ? Promise.resolve(null) : getActiveAgentId(),
+  ]);
 
   return (
     <div className="flex h-dvh overflow-hidden bg-muted/40">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header name={user.name} email={user.email} aiEnabled={settings.ai_enabled} />
+        <Header
+          name={user.name}
+          email={user.email}
+          aiEnabled={settings.ai_enabled}
+          agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+          activeAgentId={activeAgentId}
+        />
         {usingMockData && (
           <div className="flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs font-medium text-warning lg:px-6">
             <Database className="size-3.5" />

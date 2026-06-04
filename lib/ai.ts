@@ -1,6 +1,6 @@
 import "server-only";
 import OpenAI from "openai";
-import { serverEnv, features } from "@/lib/env";
+import { serverEnv } from "@/lib/env";
 import { buildSystemPrompt } from "@/lib/prompt";
 import { clamp, scoreConversation, statusForScore, shouldNotifyAdmin } from "@/lib/scoring";
 import { agentResultSchema } from "@/lib/validations";
@@ -18,17 +18,8 @@ export interface GenerateOptions {
   toneOverride?: AgentTone;
   promptOverride?: string;
   previousScore?: number;
-}
-
-let client: OpenAI | null = null;
-function getClient(): OpenAI {
-  if (!client) {
-    client = new OpenAI({
-      apiKey: serverEnv.openaiApiKey,
-      baseURL: serverEnv.openaiBaseUrl,
-    });
-  }
-  return client;
+  /** Tenant OpenAI key; falls back to the platform key when omitted. */
+  openaiKey?: string;
 }
 
 /**
@@ -47,9 +38,11 @@ export async function generateAgentResult(options: GenerateOptions): Promise<Age
 
   const heuristic = scoreConversation(contactText, options.previousScore ?? 0);
 
-  if (!features.openai) {
+  const apiKey = options.openaiKey || serverEnv.platformOpenaiApiKey;
+  if (!apiKey) {
     return fallbackResult(options, heuristic.score);
   }
+  const client = new OpenAI({ apiKey, baseURL: serverEnv.openaiBaseUrl });
 
   try {
     const systemPrompt = buildSystemPrompt({
@@ -59,7 +52,7 @@ export async function generateAgentResult(options: GenerateOptions): Promise<Age
       promptOverride: options.promptOverride,
     });
 
-    const completion = await getClient().chat.completions.create({
+    const completion = await client.chat.completions.create({
       model: serverEnv.openaiModel,
       temperature: 0.5,
       response_format: { type: "json_object" },

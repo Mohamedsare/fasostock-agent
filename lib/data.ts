@@ -1,5 +1,6 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
+import { getActiveAgent, getActiveAgentId } from "@/lib/agents";
 import { DEFAULT_AGENT_SETTINGS, SCORE_THRESHOLDS } from "@/lib/constants";
 import { buildSystemPrompt } from "@/lib/prompt";
 import {
@@ -44,9 +45,10 @@ function defaultAgentSettings(): AgentSettings {
 
 export async function getAgentSettings(): Promise<AgentSettings> {
   if (usingMockData) return defaultAgentSettings();
-  const supabase = await createClient();
-  const { data } = await supabase.from("agent_settings").select("*").limit(1).maybeSingle();
-  return (data as unknown as AgentSettings) ?? defaultAgentSettings();
+  // The active agent row carries the full persona/config (supersedes the old
+  // single agent_settings row).
+  const agent = await getActiveAgent();
+  return (agent as unknown as AgentSettings) ?? defaultAgentSettings();
 }
 
 /**
@@ -59,12 +61,15 @@ export const usingMockData = !isSupabaseConfigured;
 
 export async function getConversations(): Promise<ConversationWithContact[]> {
   if (usingMockData) return mockConversations;
+  const agentId = await getActiveAgentId();
+  if (!agentId) return [];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("conversations")
     .select("*, contact:contacts(*)")
+    .eq("agent_id", agentId)
     .order("last_message_at", { ascending: false });
-  if (error || !data) return mockConversations;
+  if (error || !data) return [];
   return data as unknown as ConversationWithContact[];
 }
 
@@ -105,22 +110,28 @@ export async function getNotes(conversationId: string): Promise<Note[]> {
 
 export async function getKnowledge(): Promise<KnowledgeBaseEntry[]> {
   if (usingMockData) return mockKnowledge;
+  const agentId = await getActiveAgentId();
+  if (!agentId) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("knowledge_base")
     .select("*")
+    .eq("agent_id", agentId)
     .order("category", { ascending: true });
-  return (data as unknown as KnowledgeBaseEntry[]) ?? mockKnowledge;
+  return (data as unknown as KnowledgeBaseEntry[]) ?? [];
 }
 
 export async function getFollowUps(): Promise<FollowUp[]> {
   if (usingMockData) return mockFollowUps;
+  const agentId = await getActiveAgentId();
+  if (!agentId) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("follow_ups")
     .select("*")
+    .eq("agent_id", agentId)
     .order("scheduled_at", { ascending: true });
-  return (data as unknown as FollowUp[]) ?? mockFollowUps;
+  return (data as unknown as FollowUp[]) ?? [];
 }
 
 export async function getContacts(): Promise<Contact[]> {

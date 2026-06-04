@@ -2,18 +2,23 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { MobileNav } from "@/components/dashboard/mobile-nav";
 import { UserMenu } from "@/components/dashboard/user-menu";
+import { AgentSwitcher, type SwitcherAgent } from "@/components/dashboard/agent-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 
-/** Top bar of the dashboard: mobile menu, AI status, theme toggle, user menu. */
+/** Top bar of the dashboard: mobile menu, agent switcher, AI status, user menu. */
 export function Header({
   name,
   email,
   aiEnabled,
+  agents = [],
+  activeAgentId = null,
 }: {
   name: string;
   email: string;
   aiEnabled: boolean;
+  agents?: SwitcherAgent[];
+  activeAgentId?: string | null;
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md lg:px-6">
@@ -28,6 +33,7 @@ export function Header({
       </Link>
 
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <AgentSwitcher agents={agents} activeId={activeAgentId} />
         <Badge tone={aiEnabled ? "success" : "neutral"} className="gap-1.5">
           <span className={`size-1.5 rounded-full ${aiEnabled ? "bg-success animate-pulse" : "bg-muted-foreground"}`} />
           {aiEnabled ? "IA active" : "IA en pause"}

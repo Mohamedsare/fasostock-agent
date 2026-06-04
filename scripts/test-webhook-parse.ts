@@ -29,6 +29,7 @@ function check(label: string, cond: boolean, detail?: unknown) {
 function upsert(message: Record<string, unknown>, extra: Record<string, unknown> = {}) {
   return {
     event: "messages.upsert",
+    sessionId: "SESSION_TEST",
     data: {
       messages: {
         key: { remoteJid: "22670112233@s.whatsapp.net", fromMe: false, id: "MSG_" + Math.random() },
@@ -48,6 +49,7 @@ console.log("\n── 1. Texte simple ──");
   check("kind=text", r?.kind === "text", r?.kind);
   check("from normalisé", r?.from === "22670112233", r?.from);
   check("texte extrait", r?.text === "Bonjour, je gère une boutique", r?.text);
+  check("sessionId extrait (routage tenant)", r?.sessionId === "SESSION_TEST", r?.sessionId);
 }
 
 console.log("\n── 2. Note vocale (voice note) ──");

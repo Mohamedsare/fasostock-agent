@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { sendWhatsAppText } from "@/lib/wasender";
-import { isSupabaseConfigured } from "@/lib/env";
+import { resolveAgentContextForConversation, wasenderCredsOf } from "@/lib/agents";
+import { isSupabaseConfigured, serverEnv } from "@/lib/env";
 import type { ActionResult } from "@/lib/actions/conversations";
 
 function revalidate() {
@@ -36,7 +37,12 @@ export async function sendFollowUpNow(id: string): Promise<ActionResult> {
   const message = (fu as { message?: string }).message;
   if (!phone || !message) return { ok: false, error: "Numéro ou message manquant." };
 
-  const sent = await sendWhatsAppText(phone, message);
+  const conversationId = (fu as { conversation_id: string }).conversation_id;
+  const ctx = await resolveAgentContextForConversation(conversationId);
+  const creds = ctx
+    ? wasenderCredsOf(ctx)
+    : { apiKey: null, baseUrl: serverEnv.wasenderBaseUrl };
+  const sent = await sendWhatsAppText(phone, message, creds);
   await supabase
     .from("follow_ups")
     .update({ status: "sent", sent_at: new Date().toISOString() })
@@ -44,7 +50,8 @@ export async function sendFollowUpNow(id: string): Promise<ActionResult> {
 
   // Record the outbound message on the conversation too.
   await supabase.from("messages").insert({
-    conversation_id: (fu as { conversation_id: string }).conversation_id,
+    agent_id: ctx?.agent.id ?? null,
+    conversation_id: conversationId,
     direction: "outbound",
     sender: "admin",
     content: message,

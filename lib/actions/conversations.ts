@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { sendWhatsAppText } from "@/lib/wasender";
-import { isSupabaseConfigured } from "@/lib/env";
+import { resolveAgentContextForConversation, wasenderCredsOf } from "@/lib/agents";
+import { isSupabaseConfigured, serverEnv } from "@/lib/env";
 import type { LeadStatus } from "@/lib/types";
 
 export interface ActionResult {
@@ -75,10 +76,15 @@ export async function sendManualMessage(
   if (!content) return { ok: false, error: "Message vide." };
   if (!isSupabaseConfigured) return { ok: false, error: "Supabase non configuré." };
 
-  const sent = await sendWhatsAppText(to, content);
+  const ctx = await resolveAgentContextForConversation(conversationId);
+  const creds = ctx
+    ? wasenderCredsOf(ctx)
+    : { apiKey: null, baseUrl: serverEnv.wasenderBaseUrl };
+  const sent = await sendWhatsAppText(to, content, creds);
 
   const supabase = await createClient();
   await supabase.from("messages").insert({
+    agent_id: ctx?.agent.id ?? null,
     conversation_id: conversationId,
     direction: "outbound",
     sender: "admin",

@@ -71,6 +71,8 @@ export interface Profile {
 
 export interface Contact {
   id: string;
+  /** Owning agent (tenant scoping). Optional in mock data. */
+  agent_id?: string | null;
   phone: string;
   /** WhatsApp opaque "@lid" identifier, when the phone isn't always sent. */
   lid: string | null;
@@ -85,6 +87,7 @@ export interface Contact {
 
 export interface Conversation {
   id: string;
+  agent_id?: string | null;
   contact_id: string;
   status: LeadStatus;
   score: number;
@@ -103,6 +106,7 @@ export interface Conversation {
 
 export interface Message {
   id: string;
+  agent_id?: string | null;
   conversation_id: string;
   direction: MessageDirection;
   sender: MessageSender;
@@ -128,6 +132,7 @@ export interface LeadQualification {
 
 export interface KnowledgeBaseEntry {
   id: string;
+  agent_id?: string | null;
   title: string;
   content: string;
   category: KnowledgeCategory;
@@ -152,6 +157,58 @@ export interface AgentSettings {
   updated_at: string;
 }
 
+/** A tenant company. Owns the OpenAI key shared by its agents. */
+export interface Organization {
+  id: string;
+  name: string;
+  owner_id: string | null;
+  /** Encrypted OpenAI key (see lib/crypto.ts). Never sent to the client. */
+  openai_api_key_enc: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AgentConnectionStatus =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "error";
+
+/**
+ * A configured WhatsApp agent (one number + persona) belonging to an org.
+ * Supersedes the single global agent_settings row: it carries the full agent
+ * persona/config plus tenant routing + per-session Wasender credentials.
+ */
+export interface Agent extends AgentSettings {
+  org_id: string;
+  /** Internal label for the agent (distinct from the persona `agent_name`). */
+  name: string;
+  /** Wasender session id used to route inbound webhooks to this agent. */
+  wasender_session_id: string | null;
+  /** Encrypted per-session Wasender key used to send messages. */
+  wasender_session_key_enc: string | null;
+  phone_number: string | null;
+  connection_status: AgentConnectionStatus;
+  /** Where this agent's lead alerts go (WhatsApp E.164). */
+  admin_whatsapp: string | null;
+  created_at: string;
+}
+
+/**
+ * Resolved per-request tenant context: an agent plus decrypted credentials.
+ * Built by lib/agents.ts and threaded through the engine / wasender / ai layers
+ * so every outbound action uses the right tenant's keys.
+ */
+export interface AgentContext {
+  agent: Agent;
+  /** Decrypted per-session Wasender key (send). Null until connected. */
+  wasenderKey: string | null;
+  wasenderBaseUrl: string;
+  /** Decrypted org OpenAI key, or the platform fallback. */
+  openaiKey: string;
+  adminWhatsapp: string;
+}
+
 export interface EmailNotification {
   id: string;
   trigger: EmailTrigger;
@@ -167,6 +224,7 @@ export interface EmailNotification {
 
 export interface FollowUp {
   id: string;
+  agent_id?: string | null;
   conversation_id: string;
   contact_id: string;
   step: 1 | 2 | 3;
@@ -196,6 +254,7 @@ export interface LabMessage {
 
 export interface Note {
   id: string;
+  agent_id?: string | null;
   conversation_id: string | null;
   contact_id: string | null;
   author_id: string | null;

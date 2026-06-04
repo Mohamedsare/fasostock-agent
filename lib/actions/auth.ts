@@ -32,6 +32,28 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   redirect(redirectTo || "/dashboard");
 }
 
+/** Self-service signup with email + password, then go to onboarding. */
+export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const fullName = String(formData.get("fullName") ?? "").trim();
+
+  if (!isSupabaseConfigured) redirect("/dashboard");
+  if (!email || !password) return { error: "Email et mot de passe requis." };
+  if (password.length < 8) return { error: "Mot de passe trop court (8 caractères minimum)." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: fullName || email.split("@")[0] } },
+  });
+  if (error) return { error: error.message };
+
+  // If email confirmation is disabled, the user is signed in immediately.
+  redirect("/onboarding");
+}
+
 /** Sign out and return to the login page. */
 export async function signOut(): Promise<void> {
   if (isSupabaseConfigured) {

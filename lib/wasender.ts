@@ -1,5 +1,5 @@
 import "server-only";
-import { serverEnv, features } from "@/lib/env";
+import { serverEnv } from "@/lib/env";
 import { LEAD_STATUS_META } from "@/lib/constants";
 import type { Contact, Conversation, EmailTrigger } from "@/lib/types";
 
@@ -13,6 +13,15 @@ export interface SendResult {
   ok: boolean;
   id?: string;
   error?: string;
+}
+
+/**
+ * Per-tenant Wasender credentials used to SEND from a specific agent's session.
+ * `apiKey` is the per-session key (null until the agent's number is connected).
+ */
+export interface WasenderCreds {
+  apiKey: string | null;
+  baseUrl: string;
 }
 
 /** The kind of WhatsApp message received. */
@@ -48,6 +57,8 @@ export interface InboundMessage {
   media?: InboundMedia;
   /** Raw `data.messages` object, needed to decrypt media via Wasender. */
   rawMessage?: Record<string, unknown>;
+  /** Wasender session id (top-level payload field) — routes to the agent. */
+  sessionId: string | null;
   messageId: string | null;
   timestamp: number; // epoch ms
   fromMe: boolean;
@@ -56,13 +67,17 @@ export interface InboundMessage {
 const MAX_RETRIES = 2;
 
 /** Send a WhatsApp text message, retrying transient failures. */
-export async function sendWhatsAppText(to: string, text: string): Promise<SendResult> {
-  if (!features.wasender) {
-    console.warn("[wasender] WASENDER_API_KEY not set — message not sent (dev mode).");
-    return { ok: false, error: "wasender_not_configured" };
+export async function sendWhatsAppText(
+  to: string,
+  text: string,
+  creds: WasenderCreds,
+): Promise<SendResult> {
+  if (!creds.apiKey) {
+    console.warn("[wasender] agent has no session key — message not sent.");
+    return { ok: false, error: "wasender_not_connected" };
   }
 
-  const url = `${serverEnv.wasenderBaseUrl.replace(/\/$/, "")}/send-message`;
+  const url = `${creds.baseUrl.replace(/\/$/, "")}/send-message`;
   // Wasender requires E.164 (with leading "+"). normalizePhone yields digits.
   const body = JSON.stringify({ to: toE164(to), text });
 
@@ -73,7 +88,7 @@ export async function sendWhatsAppText(to: string, text: string): Promise<SendRe
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${serverEnv.wasenderApiKey}`,
+          Authorization: `Bearer ${creds.apiKey}`,
         },
         body,
       });
@@ -117,15 +132,18 @@ interface WasenderResponse {
 }
 
 /** Low-level POST to the Wasender /send-message endpoint with an arbitrary body. */
-async function postSendMessage(payload: Record<string, unknown>): Promise<SendResult> {
-  if (!features.wasender) return { ok: false, error: "wasender_not_configured" };
-  const url = `${serverEnv.wasenderBaseUrl.replace(/\/$/, "")}/send-message`;
+async function postSendMessage(
+  payload: Record<string, unknown>,
+  creds: WasenderCreds,
+): Promise<SendResult> {
+  if (!creds.apiKey) return { ok: false, error: "wasender_not_connected" };
+  const url = `${creds.baseUrl.replace(/\/$/, "")}/send-message`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${serverEnv.wasenderApiKey}`,
+        Authorization: `Bearer ${creds.apiKey}`,
       },
       body: JSON.stringify(payload),
     });
@@ -141,22 +159,22 @@ async function postSendMessage(payload: Record<string, unknown>): Promise<SendRe
 }
 
 /** Send a WhatsApp voice note / audio message from a public URL. */
-export async function sendWhatsAppAudio(to: string, audioUrl: string): Promise<SendResult> {
-  if (!features.wasender) {
-    console.warn("[wasender] WASENDER_API_KEY not set — audio not sent (dev mode).");
-    return { ok: false, error: "wasender_not_configured" };
-  }
-  return postSendMessage({ to: toE164(to), audioUrl });
+export async function sendWhatsAppAudio(
+  to: string,
+  audioUrl: string,
+  creds: WasenderCreds,
+): Promise<SendResult> {
+  return postSendMessage({ to: toE164(to), audioUrl }, creds);
 }
 
 /** Send a WhatsApp image from a public URL, with an optional caption. */
 export async function sendWhatsAppImage(
   to: string,
   imageUrl: string,
+  creds: WasenderCreds,
   caption?: string,
 ): Promise<SendResult> {
-  if (!features.wasender) return { ok: false, error: "wasender_not_configured" };
-  return postSendMessage({ to: toE164(to), imageUrl, ...(caption ? { text: caption } : {}) });
+  return postSendMessage({ to: toE164(to), imageUrl, ...(caption ? { text: caption } : {}) }, creds);
 }
 
 /**
@@ -166,15 +184,16 @@ export async function sendWhatsAppImage(
 export async function uploadMediaToWasender(
   bytes: Uint8Array,
   mimetype: string,
+  creds: WasenderCreds,
 ): Promise<{ ok: boolean; url?: string; error?: string }> {
-  if (!features.wasender) return { ok: false, error: "wasender_not_configured" };
-  const url = `${serverEnv.wasenderBaseUrl.replace(/\/$/, "")}/upload`;
+  if (!creds.apiKey) return { ok: false, error: "wasender_not_connected" };
+  const url = `${creds.baseUrl.replace(/\/$/, "")}/upload`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": mimetype,
-        Authorization: `Bearer ${serverEnv.wasenderApiKey}`,
+        Authorization: `Bearer ${creds.apiKey}`,
       },
       body: bytes as BodyInit,
     });
@@ -194,15 +213,16 @@ export async function uploadMediaToWasender(
  */
 export async function decryptMediaFile(
   rawMessage: Record<string, unknown>,
+  creds: WasenderCreds,
 ): Promise<{ ok: boolean; url?: string; error?: string }> {
-  if (!features.wasender) return { ok: false, error: "wasender_not_configured" };
-  const url = `${serverEnv.wasenderBaseUrl.replace(/\/$/, "")}/decrypt-media`;
+  if (!creds.apiKey) return { ok: false, error: "wasender_not_connected" };
+  const url = `${creds.baseUrl.replace(/\/$/, "")}/decrypt-media`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${serverEnv.wasenderApiKey}`,
+        Authorization: `Bearer ${creds.apiKey}`,
       },
       body: JSON.stringify({ data: { messages: rawMessage } }),
     });
@@ -214,6 +234,71 @@ export async function decryptMediaFile(
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "network error" };
   }
+}
+
+// ───────────────── Session management (account PAT) ─────────────────
+// These manage WhatsApp sessions for every tenant under the platform's single
+// Wasender account, authenticated with the account-level Personal Access Token.
+// Per-session keys returned here are used to SEND (see WasenderCreds).
+
+interface SessionApiResult<T = Record<string, unknown>> {
+  ok: boolean;
+  data?: T;
+  error?: string;
+}
+
+async function accountFetch<T = Record<string, unknown>>(
+  path: string,
+  init: RequestInit = {},
+): Promise<SessionApiResult<T>> {
+  const base = serverEnv.wasenderBaseUrl.replace(/\/$/, "");
+  try {
+    const res = await fetch(`${base}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serverEnv.wasenderAccountToken}`,
+        ...(init.headers ?? {}),
+      },
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok || (data as { success?: boolean }).success === false) {
+      return { ok: false, error: `Wasender: ${(data as { message?: string }).message ?? `HTTP ${res.status}`}` };
+    }
+    return { ok: true, data: (data.data ?? data) as T };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "network error" };
+  }
+}
+
+/** Create a new WhatsApp session and point its webhook at our endpoint. */
+export function createSession(name: string, webhookUrl: string): Promise<SessionApiResult> {
+  return accountFetch("/whatsapp-sessions", {
+    method: "POST",
+    body: JSON.stringify({ name, webhook_url: webhookUrl, webhook_enabled: true }),
+  });
+}
+
+/** Begin connecting a session (prepares the QR). */
+export function connectSession(sessionId: string): Promise<SessionApiResult> {
+  return accountFetch(`/whatsapp-sessions/${encodeURIComponent(sessionId)}/connect`, { method: "POST" });
+}
+
+/** Fetch the QR code payload to scan (image data / string, per Wasender). */
+export function getSessionQr(sessionId: string): Promise<SessionApiResult<{ qr?: string; qrcode?: string }>> {
+  return accountFetch(`/whatsapp-sessions/${encodeURIComponent(sessionId)}/qrcode`);
+}
+
+/** Read a session (includes connection status + per-session api key). */
+export function getSession(
+  sessionId: string,
+): Promise<SessionApiResult<{ status?: string; api_key?: string; phone_number?: string }>> {
+  return accountFetch(`/whatsapp-sessions/${encodeURIComponent(sessionId)}`);
+}
+
+/** Delete a session. */
+export function deleteSession(sessionId: string): Promise<SessionApiResult> {
+  return accountFetch(`/whatsapp-sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
 }
 
 const TRIGGER_HEADER: Record<EmailTrigger, (name: string) => string> = {
@@ -228,11 +313,14 @@ export interface LeadAlertInput {
   trigger: EmailTrigger;
   contact: Contact;
   conversation: Conversation;
+  /** Per-tenant credentials + where the alert goes (this agent's admin). */
+  creds: WasenderCreds;
+  adminWhatsapp: string;
 }
 
 /**
- * Send a lead alert to Mohamed over WhatsApp (replaces the admin email).
- * Goes to ADMIN_WHATSAPP. Returns a SendResult so callers can log success.
+ * Send a lead alert to the agent's owner over WhatsApp (replaces admin email).
+ * Returns a SendResult so callers can log success.
  */
 export async function sendLeadWhatsApp(input: LeadAlertInput): Promise<SendResult> {
   const { trigger, contact, conversation } = input;
@@ -256,7 +344,7 @@ export async function sendLeadWhatsApp(input: LeadAlertInput): Promise<SendResul
     `🔗 ${link}`,
   ].filter((l): l is string => l !== null);
 
-  return sendWhatsAppText(serverEnv.adminWhatsapp, lines.join("\n"));
+  return sendWhatsAppText(input.adminWhatsapp, lines.join("\n"), input.creds);
 }
 
 /** Format a phone/JID as E.164 (digits with a leading "+"), as Wasender expects. */
@@ -338,6 +426,13 @@ export function parseWasenderWebhook(payload: unknown): InboundMessage | null {
   const ts = Number(tsRaw);
   const timestamp = ts > 1e12 ? ts : ts * 1000; // seconds → ms when needed
 
+  const sessionId =
+    typeof p.sessionId === "string"
+      ? p.sessionId
+      : typeof p.session_id === "string"
+        ? p.session_id
+        : null;
+
   return {
     from,
     lid,
@@ -346,6 +441,7 @@ export function parseWasenderWebhook(payload: unknown): InboundMessage | null {
     kind,
     media,
     rawMessage: msg as Record<string, unknown>,
+    sessionId,
     messageId: key.id ?? msg.id ?? null,
     timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
     fromMe,
