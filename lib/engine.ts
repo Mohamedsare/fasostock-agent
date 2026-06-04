@@ -110,11 +110,12 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Inb
 
   await applyAgentResult(db, { conversation, contact, result, history });
 
-  // On a human handoff we deliberately stay silent with the prospect: never
-  // tell them the agent can't help or that we're passing them to someone else.
-  // The admin email (in applyAgentResult) fires immediately so Mohamed can pick
-  // up the conversation in person without the prospect noticing the switch.
-  const isHandoff = result.status === "humain_requis";
+  // On a silent handoff (qualified/hot lead, or explicit human request) we
+  // deliberately stay silent with the prospect: never tell them we're passing
+  // them to someone else (no "je transmets vos infos à Mohamed"). The WhatsApp
+  // alert (in applyAgentResult) fires immediately so Mohamed picks up in person
+  // without the prospect noticing the switch.
+  const isHandoff = isSilentHandoff(result.status);
 
   // Send the reply over WhatsApp (skip for spam / empty / human handoff).
   // When the client wrote by voice, answer by voice too (voice in → voice out).
@@ -159,7 +160,9 @@ async function applyAgentResult(
   },
 ) {
   const { conversation, contact, result } = args;
-  const isHandoff = result.status === "humain_requis";
+  // Qualified/hot leads (and explicit human requests) are handed to Mohamed
+  // silently: the AI stops answering and he takes over in person.
+  const isHandoff = isSilentHandoff(result.status);
 
   await db
     .from("conversations")
@@ -191,12 +194,13 @@ async function applyAgentResult(
     criteria,
   });
 
-  // Email the admin on notable transitions (avoid spamming on every message).
-  // A human handoff always alerts immediately — that's the whole point of the
-  // silent handoff: Mohamed must know straight away to take over.
+  // Alert Mohamed over WhatsApp on notable transitions (qualified, hot,
+  // converted, human-requested) — once, when the status first changes, so we
+  // don't spam on every message. This is the ONLY outbound action on a silent
+  // handoff: the prospect gets no reply, Mohamed gets the alert.
   const trigger = emailTriggerFor(result.status);
   const becameNotable = result.status !== conversation.status && shouldNotifyAdmin(result.status);
-  if (trigger && (isHandoff || becameNotable)) {
+  if (trigger && (result.status === "humain_requis" || becameNotable)) {
     await notifyAdmin(db, { trigger, contact, conversation: { ...conversation, ...result } });
   }
 }
@@ -471,6 +475,21 @@ async function getAgentSettings(db: Db): Promise<AgentSettings> {
 async function getActiveKnowledge(db: Db): Promise<KnowledgeBaseEntry[]> {
   const { data } = await db.from("knowledge_base").select("*").eq("is_active", true);
   return (data as KnowledgeBaseEntry[]) ?? [];
+}
+
+/**
+ * Statuses where the lead is handed to Mohamed SILENTLY: the agent must not
+ * reply to the prospect (never announce "je transmets vos infos à Mohamed"),
+ * the conversation switches to human mode so the AI stops answering, and Mohamed
+ * is alerted over WhatsApp. Covers qualified/hot leads and explicit human
+ * requests. The prospect must never be told the conversation was handed over.
+ */
+function isSilentHandoff(status: LeadStatus): boolean {
+  return (
+    status === "humain_requis" ||
+    status === "prospect_qualifie" ||
+    status === "prospect_chaud"
+  );
 }
 
 function emailTriggerFor(status: LeadStatus): EmailTrigger | null {
