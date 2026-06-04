@@ -89,7 +89,13 @@ export async function describeImage(url: string, caption?: string): Promise<stri
   }
 }
 
-/** Synthesize a spoken reply (text-to-speech). Returns MP3 bytes + mimetype. */
+/**
+ * Synthesize a spoken reply (text-to-speech). Returns Ogg/Opus bytes — the
+ * native WhatsApp voice-note format. We deliberately avoid MP3: Wasender's
+ * upload validator sniffs file content and rejects OpenAI's raw-frame MP3
+ * ("File content does not match its declared type"), whereas Ogg/Opus (magic
+ * "OggS") is accepted and plays back as a proper voice note.
+ */
 export async function synthesizeSpeech(
   text: string,
 ): Promise<{ bytes: Uint8Array; mimetype: string } | null> {
@@ -99,10 +105,10 @@ export async function synthesizeSpeech(
       model: serverEnv.openaiTtsModel,
       voice: serverEnv.openaiTtsVoice,
       input: text,
-      response_format: "mp3",
+      response_format: "opus",
     });
     const bytes = new Uint8Array(await res.arrayBuffer());
-    return { bytes, mimetype: "audio/mpeg" };
+    return { bytes, mimetype: "audio/ogg" };
   } catch (err) {
     console.error("[media] speech synthesis failed:", err);
     return null;
