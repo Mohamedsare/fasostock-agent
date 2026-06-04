@@ -68,8 +68,13 @@ export const serverEnv = {
   get openaiTtsModel() {
     return process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts";
   },
+  /**
+   * Voice for spoken replies. Defaults to a feminine voice ("shimmer") to match
+   * the assistant's persona (Latifatou). Other feminine options: coral, nova,
+   * sage. Override with OPENAI_TTS_VOICE.
+   */
   get openaiTtsVoice() {
-    return process.env.OPENAI_TTS_VOICE || "alloy";
+    return process.env.OPENAI_TTS_VOICE || "shimmer";
   },
   get openaiBaseUrl() {
     return process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
