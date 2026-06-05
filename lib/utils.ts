@@ -20,6 +20,16 @@ export function formatPercent(value: number, fractionDigits = 0): string {
   }).format(value);
 }
 
+/** Format an amount in FCFA (XOF) — e.g. "75 000 FCFA". */
+export function formatXof(value: number): string {
+  return `${new Intl.NumberFormat("fr-FR").format(Math.round(value))} FCFA`;
+}
+
+/** Compact number for tight UIs — e.g. 9 432 → "9,4 k", 1 287 → "1,3 k". */
+export function formatCompact(value: number): string {
+  return new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
 /** Relative time in French ("il y a 3 min", "il y a 2 j"). */
 export function timeAgo(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;

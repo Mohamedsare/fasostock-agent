@@ -13,12 +13,14 @@ export function Header({
   aiEnabled,
   agents = [],
   activeAgentId = null,
+  isSuperAdmin = false,
 }: {
   name: string;
   email: string;
   aiEnabled: boolean;
   agents?: SwitcherAgent[];
   activeAgentId?: string | null;
+  isSuperAdmin?: boolean;
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur-md sm:gap-3 sm:px-4 lg:px-6">
@@ -42,7 +44,7 @@ export function Header({
           <span className="hidden sm:inline">{aiEnabled ? "IA active" : "IA en pause"}</span>
         </Badge>
         <ThemeToggle />
-        <UserMenu name={name} email={email} />
+        <UserMenu name={name} email={email} isSuperAdmin={isSuperAdmin} />
       </div>
     </header>
   );

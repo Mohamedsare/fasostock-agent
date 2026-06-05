@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, Settings as SettingsIcon } from "lucide-react";
+import { LogOut, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
 import { signOut } from "@/lib/actions/auth";
 import {
   DropdownMenu,
@@ -14,7 +14,15 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/utils";
 
-export function UserMenu({ name, email }: { name: string; email: string }) {
+export function UserMenu({
+  name,
+  email,
+  isSuperAdmin = false,
+}: {
+  name: string;
+  email: string;
+  isSuperAdmin?: boolean;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -30,6 +38,14 @@ export function UserMenu({ name, email }: { name: string; email: string }) {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {isSuperAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin" className="text-indigo-500 focus:text-indigo-500">
+              <ShieldCheck className="!text-indigo-500" />
+              Console super-admin
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href="/dashboard/settings">
             <SettingsIcon />

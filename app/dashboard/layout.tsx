@@ -4,6 +4,8 @@ import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { getSessionUser } from "@/lib/auth";
 import { getAgentSettings, usingMockData } from "@/lib/data";
 import { getOrgAgents, getActiveAgentId } from "@/lib/agents";
+import { emailIsSuperAdmin } from "@/lib/admin";
+import { isSupabaseConfigured } from "@/lib/env";
 import { Database } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -28,6 +30,7 @@ export default async function DashboardLayout({
           aiEnabled={settings.ai_enabled}
           agents={agents.map((a) => ({ id: a.id, name: a.name }))}
           activeAgentId={activeAgentId}
+          isSuperAdmin={!isSupabaseConfigured || emailIsSuperAdmin(user.email)}
         />
         {usingMockData && (
           <div className="flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs font-medium text-warning lg:px-6">
@@ -35,7 +38,7 @@ export default async function DashboardLayout({
             Mode démo — données fictives. Renseignez vos clés Supabase dans .env.local pour connecter vos vraies données.
           </div>
         )}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
           {/* Extra bottom padding on mobile clears the fixed bottom tab bar + iOS home indicator. */}
           <div className="mx-auto w-full max-w-7xl p-4 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6">
             {children}
