@@ -16,11 +16,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "FasoStock — Agent WhatsApp IA",
-    template: "%s · FasoStock",
+    default: "AgentFS — Agent WhatsApp IA",
+    template: "%s · AgentFS",
   },
   description:
-    "CRM intelligent et agent WhatsApp IA pour FasoStock : support, prospection, qualification et conversion.",
+    "AgentFS : CRM intelligent et agent WhatsApp IA pour le support, la prospection, la qualification et la conversion.",
 };
 
 export default function RootLayout({

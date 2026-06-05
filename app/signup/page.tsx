@@ -24,7 +24,7 @@ export default function SignupPage() {
             l&apos;IA qualifier vos prospects.
           </p>
         </div>
-        <p className="relative text-sm text-sidebar-muted">© {new Date().getFullYear()} FasoStock</p>
+        <p className="relative text-sm text-sidebar-muted">© {new Date().getFullYear()} AgentFS</p>
       </div>
 
       <div className="relative flex flex-col items-center justify-center px-6 py-12">

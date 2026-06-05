@@ -70,7 +70,7 @@ export async function sendLeadEmail(input: LeadEmailInput): Promise<EmailSendRes
  * error when it fails so misconfiguration is obvious.
  */
 export async function sendTestEmail(): Promise<EmailSendResult> {
-  const subject = "✅ Test d'envoi — FasoStock WhatsApp Agent";
+  const subject = "✅ Test d'envoi — AgentFS";
 
   if (!features.resend) {
     return {
@@ -110,7 +110,7 @@ export interface InvitationEmailInput {
 
 /** Invite a teammate to join an organization. Returns the provider result. */
 export async function sendInvitationEmail(input: InvitationEmailInput): Promise<EmailSendResult> {
-  const subject = `Invitation à rejoindre ${input.orgName} sur FasoStock`;
+  const subject = `Invitation à rejoindre ${input.orgName} sur AgentFS`;
   if (!features.resend) {
     console.warn("[email] Resend not configured — invitation not sent:", subject);
     return { ok: false, subject, error: "resend_not_configured" };
@@ -136,12 +136,12 @@ function renderInvitationEmail(input: InvitationEmailInput): string {
   <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:24px">
     <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb">
       <div style="background:#16a34a;padding:20px 24px;color:#fff">
-        <div style="font-size:13px;opacity:.85">FasoStock — Agent WhatsApp IA</div>
+        <div style="font-size:13px;opacity:.85">AgentFS — Agent WhatsApp IA</div>
         <div style="font-size:20px;font-weight:700;margin-top:2px">Vous êtes invité·e</div>
       </div>
       <div style="padding:22px 24px;color:#334155;font-size:14px;line-height:1.6">
         <p style="margin:0 0 12px"><b>${escapeHtml(input.inviterName)}</b> vous invite à rejoindre l'espace
-        <b>${escapeHtml(input.orgName)}</b> sur FasoStock.</p>
+        <b>${escapeHtml(input.orgName)}</b> sur AgentFS.</p>
         <p style="margin:0 0 20px">Cliquez ci-dessous pour accepter l'invitation. Si vous n'avez pas encore de compte,
         créez-en un avec cette adresse email.</p>
         <a href="${input.joinUrl}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:11px 22px;border-radius:10px;font-weight:600;font-size:14px">Rejoindre l'équipe →</a>
@@ -173,7 +173,7 @@ function renderLeadEmail(input: LeadEmailInput): string {
   <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:24px">
     <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb">
       <div style="background:#16a34a;padding:20px 24px;color:#fff">
-        <div style="font-size:13px;opacity:.85">FasoStock — Agent WhatsApp IA</div>
+        <div style="font-size:13px;opacity:.85">AgentFS — Agent WhatsApp IA</div>
         <div style="font-size:20px;font-weight:700;margin-top:2px">Nouveau lead à traiter</div>
       </div>
       <div style="padding:20px 24px">

@@ -48,7 +48,7 @@ export default function LandingPage() {
         <div className="absolute -top-32 left-1/2 h-72 w-160 -translate-x-1/2 rounded-full bg-primary/20 blur-3xl" aria-hidden />
         <div className="relative mx-auto max-w-6xl px-4 py-20 text-center sm:px-6 sm:py-28">
           <Badge tone="primary" className="mx-auto mb-5">
-            <Sparkles className="size-3.5" /> Agent WhatsApp IA pour FasoStock
+            <Sparkles className="size-3.5" /> AgentFS · Agent WhatsApp IA
           </Badge>
           <h1 className="mx-auto max-w-3xl text-balance text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
             Transformez vos messages WhatsApp en{" "}
@@ -76,7 +76,7 @@ export default function LandingPage() {
         <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
           <Image
             src="/images/im2.png"
-            alt="Aperçu du dashboard FasoStock WhatsApp Agent"
+            alt="Aperçu du dashboard AgentFS"
             width={1086}
             height={1448}
             className="h-auto w-full"
@@ -125,7 +125,7 @@ export default function LandingPage() {
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:px-6">
           <Logo />
-          <p>© {new Date().getFullYear()} FasoStock — Agent WhatsApp IA</p>
+          <p>© {new Date().getFullYear()} AgentFS — Agent WhatsApp IA</p>
         </div>
       </footer>
     </div>

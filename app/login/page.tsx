@@ -32,7 +32,7 @@ export default async function LoginPage({
             votre agent IA.
           </p>
         </div>
-        <p className="relative text-sm text-sidebar-muted">© {new Date().getFullYear()} FasoStock</p>
+        <p className="relative text-sm text-sidebar-muted">© {new Date().getFullYear()} AgentFS</p>
       </div>
 
       {/* Form panel */}
@@ -48,7 +48,7 @@ export default async function LoginPage({
 
           <div className="mb-6 space-y-1 text-center">
             <h1 className="text-2xl font-bold tracking-tight">Connexion admin</h1>
-            <p className="text-sm text-muted-foreground">Accédez à votre tableau de bord FasoStock WhatsApp Agent.</p>
+            <p className="text-sm text-muted-foreground">Accédez à votre tableau de bord AgentFS.</p>
           </div>
 
           <LoginForm redirectTo={redirectTo} demoMode={!isSupabaseConfigured} />

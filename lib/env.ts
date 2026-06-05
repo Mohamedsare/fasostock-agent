@@ -105,7 +105,7 @@ export const serverEnv = {
     return required("RESEND_API_KEY", process.env.RESEND_API_KEY);
   },
   get resendFromEmail() {
-    return process.env.RESEND_FROM_EMAIL || "FasoStock <onboarding@resend.dev>";
+    return process.env.RESEND_FROM_EMAIL || "AgentFS <onboarding@resend.dev>";
   },
   get adminEmail() {
     return required("ADMIN_EMAIL", process.env.ADMIN_EMAIL);

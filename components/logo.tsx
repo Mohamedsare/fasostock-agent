@@ -13,7 +13,7 @@ export function Logo({ className, withWordmark = true }: { className?: string; w
       </span>
       {withWordmark && (
         <span className="text-base font-bold tracking-tight">
-          Faso<span className="text-primary">Stock</span>
+          Agent<span className="text-primary">FS</span>
         </span>
       )}
     </span>
