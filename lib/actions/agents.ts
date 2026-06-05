@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
+import QRCode from "qrcode";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrgId, ACTIVE_AGENT_COOKIE } from "@/lib/agents";
 import { encryptSecret } from "@/lib/crypto";
@@ -92,6 +93,16 @@ export interface ConnectResult extends ActionResult {
   qr?: string;
 }
 
+/** Wasender returns the QR as a raw pairing string; render it to a PNG data URL. */
+async function qrToDataUrl(qrString: string | undefined): Promise<string | undefined> {
+  if (!qrString) return undefined;
+  try {
+    return await QRCode.toDataURL(qrString, { width: 320, margin: 1 });
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Provision a Wasender session for an agent and return a QR code to scan.
  * Creates the session under the platform account, points its webhook at us,
@@ -140,7 +151,7 @@ export async function connectAgentWhatsApp(
   await connectSession(ref);
   const qrRes = await getSessionQr(ref);
   const qrData = (qrRes.data ?? {}) as { qr?: string; qrcode?: string; qrCode?: string };
-  const qr = qrData.qr ?? qrData.qrcode ?? qrData.qrCode;
+  const qr = await qrToDataUrl(qrData.qr ?? qrData.qrcode ?? qrData.qrCode);
 
   const { error } = await supabase
     .from("agents")
@@ -163,7 +174,9 @@ export async function connectAgentWhatsApp(
  * Poll Wasender for the session status; when connected, store the phone number
  * and (if not already) the per-session key, and mark the agent connected.
  */
-export async function refreshAgentConnection(agentId: string): Promise<ActionResult & { status?: string }> {
+export async function refreshAgentConnection(
+  agentId: string,
+): Promise<ActionResult & { status?: string; qr?: string }> {
   if (!isSupabaseConfigured) return { ok: false, error: "Supabase non configuré." };
   const supabase = await createClient();
   const { data: agent } = await supabase
@@ -177,6 +190,14 @@ export async function refreshAgentConnection(agentId: string): Promise<ActionRes
   const res = await getSession(ref);
   const data = (res.data ?? {}) as { status?: string; api_key?: string; phone_number?: string };
   const connected = (data.status ?? "").toLowerCase().includes("connected");
+
+  // Still scanning → return a fresh QR (WhatsApp rotates it every ~20s).
+  let freshQr: string | undefined;
+  if (!connected) {
+    const qrRes = await getSessionQr(ref);
+    const qd = (qrRes.data ?? {}) as { qr?: string; qrcode?: string; qrCode?: string };
+    freshQr = await qrToDataUrl(qd.qr ?? qd.qrcode ?? qd.qrCode);
+  }
 
   const hasKey = Boolean(
     (agent as { wasender_session_id?: string | null }).wasender_session_id,
@@ -195,5 +216,5 @@ export async function refreshAgentConnection(agentId: string): Promise<ActionRes
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/dashboard/agents");
-  return { ok: true, status: connected ? "connected" : "connecting" };
+  return { ok: true, status: connected ? "connected" : "connecting", qr: freshQr };
 }

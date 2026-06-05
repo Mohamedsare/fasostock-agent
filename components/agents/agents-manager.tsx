@@ -94,7 +94,8 @@ export function AgentsManager({
         setQrAgent(null);
         setQr(null);
       } else {
-        toast.message("Pas encore connecté — scannez le QR puis réessayez.");
+        if (r.qr) setQr(r.qr); // refresh the rotated QR
+        toast.message("Pas encore connecté — scannez le QR affiché puis revérifiez.");
       }
       router.refresh();
     });

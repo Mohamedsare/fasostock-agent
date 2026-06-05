@@ -299,8 +299,10 @@ export function connectSession(sessionId: string): Promise<SessionApiResult> {
   return accountFetch(`/whatsapp-sessions/${encodeURIComponent(sessionId)}/connect`, { method: "POST" });
 }
 
-/** Fetch the QR code payload to scan (image data / string, per Wasender). */
-export function getSessionQr(sessionId: string): Promise<SessionApiResult<{ qr?: string; qrcode?: string }>> {
+/** Fetch the QR pairing string to scan (Wasender returns `data.qrCode`). */
+export function getSessionQr(
+  sessionId: string,
+): Promise<SessionApiResult<{ qr?: string; qrcode?: string; qrCode?: string; status?: string }>> {
   return accountFetch(`/whatsapp-sessions/${encodeURIComponent(sessionId)}/qrcode`);
 }
 
