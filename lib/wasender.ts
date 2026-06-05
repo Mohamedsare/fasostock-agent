@@ -306,6 +306,29 @@ export function getSessionQr(
   return accountFetch(`/whatsapp-sessions/${encodeURIComponent(sessionId)}/qrcode`);
 }
 
+/**
+ * Update a session. Wasender only syncs webhook settings to the live WhatsApp
+ * connection on PUT (when connected) — call this after the QR scan so inbound
+ * events actually fire. Requires name + phone_number + account_protection.
+ */
+export function updateSessionWebhook(
+  sessionId: string,
+  args: { name: string; phoneNumber: string; webhookUrl: string },
+): Promise<SessionApiResult> {
+  return accountFetch(`/whatsapp-sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      name: args.name,
+      phone_number: args.phoneNumber,
+      account_protection: true,
+      log_messages: true,
+      webhook_url: args.webhookUrl,
+      webhook_enabled: true,
+      webhook_events: ["messages.received"],
+    }),
+  });
+}
+
 /** Read a session (includes connection status + per-session api key). */
 export function getSession(
   sessionId: string,

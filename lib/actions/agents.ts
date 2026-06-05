@@ -7,7 +7,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrgId, ACTIVE_AGENT_COOKIE } from "@/lib/agents";
 import { encryptSecret } from "@/lib/crypto";
 import { isSupabaseConfigured, serverEnv } from "@/lib/env";
-import { createSession, connectSession, getSessionQr, getSession } from "@/lib/wasender";
+import {
+  createSession,
+  connectSession,
+  getSessionQr,
+  getSession,
+  updateSessionWebhook,
+} from "@/lib/wasender";
 import { DEFAULT_AGENT_SETTINGS } from "@/lib/constants";
 import type { ActionResult } from "@/lib/actions/conversations";
 
@@ -181,7 +187,7 @@ export async function refreshAgentConnection(
   const supabase = await createClient();
   const { data: agent } = await supabase
     .from("agents")
-    .select("id, wasender_session_id, wasender_session_ref, wasender_session_key_enc")
+    .select("id, name, phone_number, wasender_session_id, wasender_session_ref, wasender_session_key_enc")
     .eq("id", agentId)
     .maybeSingle();
   const ref = (agent as { wasender_session_ref?: string | null } | null)?.wasender_session_ref;
@@ -190,6 +196,21 @@ export async function refreshAgentConnection(
   const res = await getSession(ref);
   const data = (res.data ?? {}) as { status?: string; api_key?: string; phone_number?: string };
   const connected = (data.status ?? "").toLowerCase().includes("connected");
+
+  // Once connected, PUT the session so Wasender syncs the webhook to the live
+  // WhatsApp connection (otherwise inbound events never fire).
+  if (connected) {
+    const a = agent as { name?: string; phone_number?: string };
+    const secret = serverEnv.wasenderWebhookSecret;
+    const webhookUrl =
+      `${serverEnv.appUrl.replace(/\/$/, "")}/api/webhooks/wasender` +
+      (secret ? `?secret=${encodeURIComponent(secret)}` : "");
+    await updateSessionWebhook(ref, {
+      name: a.name ?? "Agent",
+      phoneNumber: data.phone_number ?? a.phone_number ?? "",
+      webhookUrl,
+    });
+  }
 
   // Still scanning → return a fresh QR (WhatsApp rotates it every ~20s).
   let freshQr: string | undefined;
