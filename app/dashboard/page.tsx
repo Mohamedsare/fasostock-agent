@@ -106,27 +106,31 @@ export default async function DashboardPage() {
                   <li key={c.id}>
                     <Link
                       href={`/dashboard/conversations/${c.id}`}
-                      className="flex items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-muted"
+                      className="flex gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-muted"
                     >
-                      <Avatar className="size-10">
+                      <Avatar className="size-10 shrink-0">
                         <AvatarFallback>{getInitials(contactLabel(c.contact.name, c.contact.phone))}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate font-medium text-foreground">
+                          <p className="min-w-0 flex-1 truncate font-medium text-foreground">
                             {contactLabel(c.contact.name, c.contact.phone)}
                           </p>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {timeAgo(c.last_message_at)}
+                          </span>
                           {c.unread_count > 0 && (
-                            <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-                              {c.unread_count}
+                            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                              {c.unread_count > 99 ? "99+" : c.unread_count}
                             </span>
                           )}
                         </div>
-                        <p className="truncate text-sm text-muted-foreground">{c.last_message_preview}</p>
-                      </div>
-                      <div className="hidden flex-col items-end gap-1.5 sm:flex">
-                        <StatusBadge status={c.status} />
-                        <span className="text-xs text-muted-foreground">{timeAgo(c.last_message_at)}</span>
+                        <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                          {c.last_message_preview}
+                        </p>
+                        <div className="mt-1.5">
+                          <StatusBadge status={c.status} />
+                        </div>
                       </div>
                     </Link>
                   </li>
@@ -179,7 +183,11 @@ export default async function DashboardPage() {
             {chartData.length === 0 ? (
               <EmptyState icon={TrendingUp} title="Pas encore de données" />
             ) : (
-              <StatusChart data={chartData} />
+              <div className="-mx-2 overflow-x-auto px-2">
+                <div className="min-w-[18rem]">
+                  <StatusChart data={chartData} />
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
