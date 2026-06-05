@@ -142,6 +142,56 @@ export async function getContacts(): Promise<Contact[]> {
   return [...map.values()];
 }
 
+/** Raw audit log row for the activity journal. */
+export interface AuditLogRow {
+  id: string;
+  actor: string;
+  action: string;
+  entity: string;
+  entity_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+/** Recent audit-log entries for the active agent (newest first). */
+export async function getAuditLogs(limit = 60): Promise<AuditLogRow[]> {
+  if (usingMockData) return [];
+  const agentId = await getActiveAgentId();
+  if (!agentId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("audit_logs")
+    .select("id, actor, action, entity, entity_id, metadata, created_at")
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data as AuditLogRow[]) ?? [];
+}
+
+/** Recent lead/alert notifications (WhatsApp + email trail) for the active agent. */
+export async function getLeadNotifications(limit = 40) {
+  if (usingMockData) return [];
+  const agentId = await getActiveAgentId();
+  if (!agentId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("email_notifications")
+    .select("id, trigger, to_email, subject, status, error, created_at, sent_at")
+    .eq("agent_id", agentId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data as {
+    id: string;
+    trigger: string;
+    to_email: string;
+    subject: string;
+    status: string;
+    error: string | null;
+    created_at: string;
+    sent_at: string | null;
+  }[]) ?? [];
+}
+
 /** Compute the dashboard metrics from the conversation set. */
 export async function getDashboardStats(): Promise<DashboardStats> {
   const conversations = await getConversations();
@@ -156,11 +206,29 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     (c) => c.mode === "human" || c.status === "humain_requis" || c.unread_count > 0,
   ).length;
 
-  const aiHandled = Object.values(messagesByConv)
-    .flat()
-    .filter((m) => m.sender === "ai").length;
-
   const conversionRate = total > 0 ? converted / total : 0;
+
+  // Count AI-handled messages: from mock data in dev, otherwise a real DB count
+  // scoped to the active agent (so the dashboard shows live numbers, not 0).
+  let aiHandledMessages: number;
+  if (usingMockData) {
+    aiHandledMessages = Object.values(messagesByConv)
+      .flat()
+      .filter((m) => m.sender === "ai").length;
+  } else {
+    const agentId = await getActiveAgentId();
+    if (agentId) {
+      const supabase = await createClient();
+      const { count } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("agent_id", agentId)
+        .eq("sender", "ai");
+      aiHandledMessages = count ?? 0;
+    } else {
+      aiHandledMessages = 0;
+    }
+  }
 
   return {
     totalConversations: total,
@@ -170,7 +238,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     convertedClients: converted,
     pendingConversations: pending,
     conversionRate,
-    aiHandledMessages: usingMockData ? aiHandled : 0,
+    aiHandledMessages,
   };
 }
 

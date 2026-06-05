@@ -168,6 +168,33 @@ export interface Organization {
   updated_at: string;
 }
 
+/** A member of an organization (a profile linked to the org). */
+export interface OrgMember {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  /** True when this member is the org's owner (organizations.owner_id). */
+  is_owner: boolean;
+  created_at: string;
+}
+
+export type InvitationStatus = "pending" | "accepted" | "revoked";
+
+/** A pending/accepted invitation to join an organization (migration 0006). */
+export interface Invitation {
+  id: string;
+  org_id: string;
+  email: string;
+  role: string;
+  token: string;
+  status: InvitationStatus;
+  invited_by: string | null;
+  created_at: string;
+  accepted_at: string | null;
+  expires_at: string;
+}
+
 export type AgentConnectionStatus =
   | "disconnected"
   | "connecting"

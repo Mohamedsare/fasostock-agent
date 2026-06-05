@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
 import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentOrgId } from "@/lib/agents";
+import { claimInviteForCurrentUser } from "@/lib/actions/team";
 
 export const metadata: Metadata = { title: "Bienvenue" };
 
@@ -13,6 +14,9 @@ export default async function OnboardingPage() {
   if (isSupabaseConfigured) {
     const orgId = await getCurrentOrgId();
     if (orgId) redirect("/dashboard");
+    // Invited teammate? Join the inviting org instead of creating a new one.
+    const joined = await claimInviteForCurrentUser();
+    if (joined) redirect("/dashboard");
   }
 
   return (

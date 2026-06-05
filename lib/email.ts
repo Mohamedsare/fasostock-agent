@@ -101,6 +101,56 @@ export async function sendTestEmail(): Promise<EmailSendResult> {
   }
 }
 
+export interface InvitationEmailInput {
+  to: string;
+  orgName: string;
+  inviterName: string;
+  joinUrl: string;
+}
+
+/** Invite a teammate to join an organization. Returns the provider result. */
+export async function sendInvitationEmail(input: InvitationEmailInput): Promise<EmailSendResult> {
+  const subject = `Invitation à rejoindre ${input.orgName} sur FasoStock`;
+  if (!features.resend) {
+    console.warn("[email] Resend not configured — invitation not sent:", subject);
+    return { ok: false, subject, error: "resend_not_configured" };
+  }
+  try {
+    const { data, error } = await getResend().emails.send({
+      from: serverEnv.resendFromEmail,
+      to: input.to,
+      subject,
+      html: renderInvitationEmail(input),
+    });
+    if (error) return { ok: false, subject, error: error.message };
+    return { ok: true, id: data?.id, subject };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "send error";
+    console.error("[email] invitation send failed:", message);
+    return { ok: false, subject, error: message };
+  }
+}
+
+function renderInvitationEmail(input: InvitationEmailInput): string {
+  return `
+  <div style="font-family:Arial,sans-serif;background:#f8fafc;padding:24px">
+    <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb">
+      <div style="background:#16a34a;padding:20px 24px;color:#fff">
+        <div style="font-size:13px;opacity:.85">FasoStock — Agent WhatsApp IA</div>
+        <div style="font-size:20px;font-weight:700;margin-top:2px">Vous êtes invité·e</div>
+      </div>
+      <div style="padding:22px 24px;color:#334155;font-size:14px;line-height:1.6">
+        <p style="margin:0 0 12px"><b>${escapeHtml(input.inviterName)}</b> vous invite à rejoindre l'espace
+        <b>${escapeHtml(input.orgName)}</b> sur FasoStock.</p>
+        <p style="margin:0 0 20px">Cliquez ci-dessous pour accepter l'invitation. Si vous n'avez pas encore de compte,
+        créez-en un avec cette adresse email.</p>
+        <a href="${input.joinUrl}" style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:11px 22px;border-radius:10px;font-weight:600;font-size:14px">Rejoindre l'équipe →</a>
+        <p style="margin:20px 0 0;font-size:12px;color:#94a3b8">Lien valable 14 jours. Si vous n'attendiez pas cette invitation, ignorez cet email.</p>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderLeadEmail(input: LeadEmailInput): string {
   const { contact, conversation, recentMessages = [] } = input;
   const name = contact.name?.trim() || contact.phone;

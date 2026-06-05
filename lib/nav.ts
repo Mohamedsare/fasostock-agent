@@ -11,6 +11,8 @@ import {
   FlaskConical,
   BarChart3,
   Settings,
+  Users2,
+  ScrollText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +35,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Relances", href: "/dashboard/follow-ups", icon: Send, group: "intelligence" },
   { label: "Labs IA", href: "/dashboard/labs", icon: FlaskConical, group: "intelligence" },
   { label: "Statistiques", href: "/dashboard/stats", icon: BarChart3, group: "système" },
+  { label: "Journal", href: "/dashboard/activity", icon: ScrollText, group: "système" },
+  { label: "Équipe", href: "/dashboard/team", icon: Users2, group: "système" },
   { label: "Paramètres", href: "/dashboard/settings", icon: Settings, group: "système" },
 ];
 
