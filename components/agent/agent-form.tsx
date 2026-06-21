@@ -17,10 +17,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { saveAgentSettings } from "@/lib/actions/agent";
+import { saveAgentConfig } from "@/lib/actions/agents";
 import type { AgentSettings } from "@/lib/types";
 
-export function AgentForm({ settings }: { settings: AgentSettings }) {
+interface AgentFormProps {
+  agentId: string;
+  settings: AgentSettings;
+  onSaved?: () => void;
+}
+
+export function AgentForm({ agentId, settings, onSaved }: AgentFormProps) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [form, setForm] = React.useState({
@@ -42,10 +48,11 @@ export function AgentForm({ settings }: { settings: AgentSettings }) {
 
   function onSave() {
     startTransition(async () => {
-      const res = await saveAgentSettings(form);
+      const res = await saveAgentConfig(agentId, form);
       if (res.ok) {
-        toast.success("Configuration de l'agent enregistrée.");
+        toast.success("Configuration enregistrée.");
         router.refresh();
+        onSaved?.();
       } else {
         toast.error(res.error ?? "Échec de l'enregistrement.");
       }
@@ -142,21 +149,20 @@ export function AgentForm({ settings }: { settings: AgentSettings }) {
             <input
               type="range" min={0} max={100} value={form.qualified_threshold}
               onChange={(e) => set("qualified_threshold", Number(e.target.value))}
-              className="w-full accent-[var(--primary)]"
+              className="w-full accent-primary"
             />
           </Field>
           <Field label={`Seuil chaud : ${form.hot_threshold}`}>
             <input
               type="range" min={0} max={100} value={form.hot_threshold}
               onChange={(e) => set("hot_threshold", Number(e.target.value))}
-              className="w-full accent-[var(--accent)]"
+              className="w-full accent-accent"
             />
           </Field>
         </CardContent>
       </Card>
 
-      {/* Sticky save bar */}
-      <div className="sticky bottom-0 -mx-4 flex justify-end border-t border-border bg-background/90 px-4 py-3 backdrop-blur lg:-mx-6 lg:px-6">
+      <div className="flex justify-end pt-2">
         <Button onClick={onSave} disabled={pending} size="lg">
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
           Enregistrer

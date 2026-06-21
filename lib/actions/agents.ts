@@ -16,7 +16,23 @@ import {
   mapSessionStatus,
 } from "@/lib/wasender";
 import { DEFAULT_AGENT_SETTINGS } from "@/lib/constants";
+import { agentSettingsSchema } from "@/lib/validations";
 import type { ActionResult } from "@/lib/actions/conversations";
+
+/** Save config (persona + rules + thresholds) for a specific agent. */
+export async function saveAgentConfig(agentId: string, input: unknown): Promise<ActionResult> {
+  if (!isSupabaseConfigured) return { ok: false, error: "Supabase non configuré." };
+  const parsed = agentSettingsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Champs invalides : " + JSON.stringify(parsed.error.flatten().fieldErrors) };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.from("agents").update(parsed.data).eq("id", agentId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard/agents");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
 
 /** Switch the dashboard's active agent (cookie). */
 export async function setActiveAgent(agentId: string): Promise<ActionResult> {
@@ -31,10 +47,20 @@ export async function setActiveAgent(agentId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Create a new agent in the current org. */
-export async function createAgent(name: string): Promise<ActionResult> {
+export interface CreateAgentInput {
+  name: string;
+  tone: string;
+  operating_mode: string;
+  system_prompt: string;
+  welcome_message: string;
+  qualification_rules: string;
+  human_handoff_rules: string;
+}
+
+/** Create a new agent in the current org with a full initial config. */
+export async function createAgent(input: CreateAgentInput): Promise<ActionResult> {
   if (!isSupabaseConfigured) return { ok: false, error: "Supabase non configuré." };
-  const label = name.trim() || "Nouvel agent";
+  const label = input.name.trim() || "Nouvel agent";
   const orgId = await getCurrentOrgId();
   if (!orgId) return { ok: false, error: "Aucune organisation." };
 
@@ -43,12 +69,15 @@ export async function createAgent(name: string): Promise<ActionResult> {
     org_id: orgId,
     name: label,
     agent_name: label,
-    tone: DEFAULT_AGENT_SETTINGS.tone,
+    tone: input.tone,
     language: DEFAULT_AGENT_SETTINGS.language,
-    welcome_message: DEFAULT_AGENT_SETTINGS.welcome_message,
+    welcome_message: input.welcome_message,
+    system_prompt: input.system_prompt,
+    qualification_rules: input.qualification_rules,
+    human_handoff_rules: input.human_handoff_rules,
     qualified_threshold: DEFAULT_AGENT_SETTINGS.qualified_threshold,
     hot_threshold: DEFAULT_AGENT_SETTINGS.hot_threshold,
-    operating_mode: DEFAULT_AGENT_SETTINGS.operating_mode,
+    operating_mode: input.operating_mode,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/dashboard/agents");
@@ -177,10 +206,8 @@ export async function connectAgentWhatsApp(
   return { ok: true, qr };
 }
 
-/**
- * Poll Wasender for the session status; when connected, store the phone number
- * and (if not already) the per-session key, and mark the agent connected.
- */
+
+
 export async function refreshAgentConnection(
   agentId: string,
 ): Promise<ActionResult & { status?: string; qr?: string }> {

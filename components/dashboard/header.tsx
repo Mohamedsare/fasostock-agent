@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { AgentSwitcher, type SwitcherAgent } from "@/components/dashboard/agent-switcher";
@@ -27,14 +26,6 @@ export function Header({
       {/* Mobile brand mark (desktop shows it in the sidebar; menu lives in the bottom bar). */}
       <Link href="/dashboard" className="shrink-0 lg:hidden" aria-label="Accueil">
         <Logo withWordmark={false} />
-      </Link>
-
-      <Link
-        href="/dashboard/conversations"
-        className="hidden items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex sm:w-72"
-      >
-        <Search className="size-4" />
-        <span>Rechercher un prospect, un numéro…</span>
       </Link>
 
       <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-3">

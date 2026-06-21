@@ -3,15 +3,16 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Bot, Loader2, Plus, QrCode, RefreshCw, Trash2, CheckCircle2, Circle, PhoneForwarded } from "lucide-react";
+import { Bot, Loader2, Plus, QrCode, RefreshCw, Trash2, CheckCircle2, Circle, PhoneForwarded, Settings2 } from "lucide-react";
 import {
-  createAgent,
   deleteAgent,
   connectAgentWhatsApp,
   refreshAgentConnection,
   setActiveAgent,
   saveAgentAdminWhatsapp,
 } from "@/lib/actions/agents";
+import { AgentForm } from "@/components/agent/agent-form";
+import { CreateAgentDialog } from "@/components/agents/create-agent-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -23,14 +24,15 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import type { AgentSettings } from "@/lib/types";
 
-export interface ManagedAgent {
+export interface ManagedAgent extends AgentSettings {
   id: string;
+  /** Internal label for the agent (distinct from the persona `agent_name`). */
   name: string;
   phone_number: string | null;
   connection_status: string;
   wasender_session_id: string | null;
-  /** WhatsApp number of the human who takes over qualified leads (E.164). */
   admin_whatsapp: string | null;
 }
 
@@ -49,13 +51,16 @@ export function AgentsManager({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [name, setName] = useState("");
-  const [qr, setQr] = useState<string | null>(null);
-  const [qrAgent, setQrAgent] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  // connect dialog
+  const [connectAgent, setConnectAgent] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
-  // Relay (takeover) number editing — per agent, multi-tenant.
+  const [qr, setQr] = useState<string | null>(null);
+  // relay dialog
   const [relayAgent, setRelayAgent] = useState<string | null>(null);
   const [relayPhone, setRelayPhone] = useState("");
+  // config dialog
+  const [configAgent, setConfigAgent] = useState<ManagedAgent | null>(null);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>, success?: string) {
     start(async () => {
@@ -70,18 +75,21 @@ export function AgentsManager({
   }
 
   function openConnect(agentId: string) {
-    setQrAgent(agentId);
-    setQr(null);
+    setConnectAgent(agentId);
     setPhone("");
+    setQr(null);
+  }
+
+  function closeConnect() {
+    setConnectAgent(null);
+    setPhone("");
+    setQr(null);
   }
 
   function generateQr(agentId: string) {
     start(async () => {
       const r = await connectAgentWhatsApp(agentId, phone);
-      if (!r.ok) {
-        toast.error(r.error ?? "Connexion échouée.");
-        return;
-      }
+      if (!r.ok) { toast.error(r.error ?? "Connexion échouée."); return; }
       setQr(r.qr ?? null);
       if (!r.qr) toast.message("Session créée. Cliquez sur Vérifier si le QR n'apparaît pas.");
       router.refresh();
@@ -91,17 +99,13 @@ export function AgentsManager({
   function checkStatus(agentId: string) {
     start(async () => {
       const r = await refreshAgentConnection(agentId);
-      if (!r.ok) {
-        toast.error(r.error ?? "Vérification échouée.");
-        return;
-      }
+      if (!r.ok) { toast.error(r.error ?? "Vérification échouée."); return; }
       if (r.status === "connected") {
         toast.success("Numéro connecté ✅");
-        setQrAgent(null);
-        setQr(null);
+        closeConnect();
       } else {
-        if (r.qr) setQr(r.qr); // refresh the rotated QR
-        toast.message("Pas encore connecté — scannez le QR affiché puis revérifiez.");
+        if (r.qr) setQr(r.qr);
+        toast.message("Pas encore connecté — scannez le QR puis revérifiez.");
       }
       router.refresh();
     });
@@ -114,7 +118,6 @@ export function AgentsManager({
 
   function saveRelay(agentId: string) {
     const value = relayPhone.trim();
-    // Allow clearing (falls back to the platform default), else require E.164-ish.
     if (value && !/^\+?\d{8,15}$/.test(value)) {
       toast.error("Numéro invalide. Format attendu : +226XXXXXXXX.");
       return;
@@ -140,27 +143,15 @@ export function AgentsManager({
 
   return (
     <div className="space-y-6">
-      {/* Create */}
-      <Card className="p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1 space-y-1.5">
-            <label htmlFor="agentName" className="text-sm font-medium">Nouvel agent</label>
-            <Input
-              id="agentName"
-              placeholder="Ex : Ventes, Support…"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <Button
-            disabled={pending || !name.trim()}
-            onClick={() => run(() => createAgent(name), "Agent créé.")}
-          >
-            {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-            Créer
-          </Button>
-        </div>
-      </Card>
+      {/* Create button */}
+      <div className="flex justify-end">
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="size-4" />
+          Créer un agent
+        </Button>
+      </div>
+
+      <CreateAgentDialog open={createOpen} onOpenChange={setCreateOpen} />
 
       {/* List */}
       {agents.length === 0 ? (
@@ -202,6 +193,11 @@ export function AgentsManager({
                     Rendre actif
                   </Button>
                 )}
+                <Button variant="outline" size="sm" disabled={pending}
+                  onClick={() => setConfigAgent(a)}>
+                  <Settings2 className="size-4" />
+                  Configurer
+                </Button>
                 <Button variant="outline" size="sm" disabled={pending} onClick={() => openConnect(a.id)}>
                   <QrCode className="size-4" />
                   {a.connection_status === "connected" ? "Reconnecter" : "Connecter WhatsApp"}
@@ -225,46 +221,65 @@ export function AgentsManager({
         </div>
       )}
 
-      {/* Connect dialog: phone number → QR → verify */}
-      <Dialog open={qrAgent !== null} onOpenChange={(o) => { if (!o) { setQrAgent(null); setQr(null); setPhone(""); } }}>
-        <DialogContent>
+      {/* Config dialog */}
+      <Dialog open={configAgent !== null} onOpenChange={(o) => { if (!o) setConfigAgent(null); }}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Connecter le numéro WhatsApp</DialogTitle>
+            <DialogTitle>Configurer — {configAgent?.name}</DialogTitle>
+            <DialogDescription>
+              Persona, prompt système, règles et seuils de scoring de cet agent.
+            </DialogDescription>
+          </DialogHeader>
+          {configAgent && (
+            <AgentForm
+              agentId={configAgent.id}
+              settings={configAgent}
+              onSaved={() => setConfigAgent(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Connect dialog */}
+      <Dialog open={connectAgent !== null} onOpenChange={(o) => { if (!o) closeConnect(); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Connecter WhatsApp</DialogTitle>
             <DialogDescription>
               {qr
-                ? "Ouvrez WhatsApp → Appareils connectés → Connecter un appareil, puis scannez ce QR code."
+                ? "Scannez ce QR code depuis WhatsApp."
                 : "Entrez le numéro WhatsApp à connecter pour cet agent."}
             </DialogDescription>
           </DialogHeader>
 
           {!qr ? (
-            <div className="flex flex-col gap-3 py-2">
+            <div className="flex flex-col gap-3">
               <div className="space-y-1.5">
                 <label htmlFor="connectPhone" className="text-sm font-medium">Numéro WhatsApp</label>
-                <Input
-                  id="connectPhone"
-                  placeholder="+226 70 00 00 00"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
+                <Input id="connectPhone" placeholder="+226 70 00 00 00" value={phone}
+                  onChange={(e) => setPhone(e.target.value)} autoFocus />
               </div>
               <Button className="w-full" disabled={pending || !phone.trim()}
-                onClick={() => qrAgent && generateQr(qrAgent)}>
+                onClick={() => connectAgent && generateQr(connectAgent)}>
                 {pending ? <Loader2 className="size-4 animate-spin" /> : <QrCode className="size-4" />}
                 Générer le QR code
               </Button>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-4 py-2">
+            <div className="flex flex-col items-center gap-4">
               {qrSrc ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={qrSrc} alt="QR code WhatsApp" className="size-56 rounded-lg border border-border bg-white p-2" />
+                <img src={qrSrc} alt="QR code WhatsApp" className="size-52 rounded-xl border border-border bg-white p-2" />
               ) : (
-                <div className="flex size-56 items-center justify-center rounded-lg border border-dashed border-border p-3 text-center text-sm text-muted-foreground">
-                  QR en cours de génération — cliquez sur Vérifier dans quelques secondes.
+                <div className="flex size-52 items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
+                  QR en cours de génération…
                 </div>
               )}
-              <Button className="w-full" disabled={pending} onClick={() => qrAgent && checkStatus(qrAgent)}>
+              <p className="text-center text-xs text-muted-foreground">
+                WhatsApp → Appareils connectés → Connecter un appareil
+              </p>
+              <Button className="w-full" disabled={pending}
+                onClick={() => connectAgent && checkStatus(connectAgent)}>
                 {pending ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                 J&apos;ai scanné — Vérifier la connexion
               </Button>
@@ -273,7 +288,7 @@ export function AgentsManager({
         </DialogContent>
       </Dialog>
 
-      {/* Relay number dialog: who takes over a qualified lead (per tenant/agent) */}
+      {/* Relay dialog */}
       <Dialog open={relayAgent !== null} onOpenChange={(o) => { if (!o) setRelayAgent(null); }}>
         <DialogContent>
           <DialogHeader>
